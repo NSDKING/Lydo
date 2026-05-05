@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kartl — Plan Screen v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root {
+  --bg:#0f0f0f; --s1:#181818; --s2:#222; --s3:#2c2c2c; --s4:#363636;
+  --b1:#2a2a2a; --b2:#383838; --b3:#484848;
+  --lime:#b5f23d; --lime-a:rgba(181,242,61,0.12); --lime-b:rgba(181,242,61,0.06);
+  --orange:#ff6b35; --orange-a:rgba(255,107,53,0.12);
+  --blue:#4d9fff; --blue-a:rgba(77,159,255,0.10);
+  --purple:#c47fff; --purple-a:rgba(196,127,255,0.12);
+  --red:#ff4757; --red-a:rgba(255,71,87,0.10);
+  --text:#f0f0ee; --t2:#a0a09e; --t3:#5e5e5c; --t4:#3a3a38;
+}
+body {
+  background:#080808;
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'DM Sans',sans-serif;
+  padding:40px 20px;
+}
+
+/* ── PHONE ── */
+.phone {
+  width:390px; height:844px;
+  background:var(--bg);
+  border-radius:52px;
+  border:1.5px solid #252525;
+  overflow:hidden;
+  position:relative;
+  box-shadow:0 0 0 1px #111, 0 50px 140px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* ── SCREENS ── */
+.screen { position:absolute; inset:0; display:none; flex-direction:column; overflow:hidden; }
+.screen.active { display:flex; }
+
+/* ── SCROLLABLE BODY ── */
+.scroll-body { flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; padding-bottom:90px; }
+.scroll-body::-webkit-scrollbar { display:none; }
+
+/* ── STATUS BAR ── */
+.sbar { height:54px; display:flex; align-items:flex-end; justify-content:space-between; padding:0 28px 10px; flex-shrink:0; }
+.sbar-time { font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600; color:var(--text); }
+.sbar-icons { display:flex; align-items:center; gap:5px; }
+.sbar-icons span { font-size:13px; color:var(--text); }
+
+/* ── TAB BAR ── */
+.tabbar {
+  position:absolute; bottom:0; left:0; right:0; height:86px;
+  background:rgba(14,14,14,0.97); backdrop-filter:blur(24px);
+  border-top:1px solid var(--b1);
+  display:flex; align-items:flex-start; justify-content:space-around;
+  padding-top:12px; z-index:200;
+}
+.tb-item { display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; padding:4px 14px; border-radius:12px; }
+.tb-icon { font-size:21px; transition:transform .2s; }
+.tb-label { font-size:10px; font-weight:500; color:var(--t3); transition:color .2s; font-family:'DM Sans',sans-serif; }
+.tb-item.active .tb-label { color:var(--lime); }
+.tb-item.active .tb-icon { transform:scale(1.1); }
+
+/* ── PLAN SCREEN HEADER ── */
+.plan-header { padding:58px 22px 0; flex-shrink:0; }
+.plan-eyebrow { font-family:'DM Mono',monospace; font-size:10px; color:var(--lime); letter-spacing:.14em; text-transform:uppercase; margin-bottom:5px; }
+.plan-title-row { display:flex; align-items:flex-start; justify-content:space-between; }
+.plan-title { font-family:'Clash Display',sans-serif; font-size:27px; font-weight:700; color:var(--text); line-height:1.1; }
+
+/* Regen button */
+.regen-btn {
+  display:flex; align-items:center; gap:5px;
+  background:var(--s2); border:1px solid var(--b2);
+  border-radius:20px; padding:8px 12px; cursor:pointer;
+  transition:all .18s; margin-top:4px; flex-shrink:0;
+}
+.regen-btn:hover { border-color:var(--lime); background:var(--lime-a); }
+.regen-btn span { font-size:11px; color:var(--t2); font-weight:500; }
+.regen-icon { font-size:13px; transition:transform .6s; }
+.regen-icon.spin { animation:spin .6s linear; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Budget strip */
+.budget-strip {
+  margin:14px 22px 0;
+  background:var(--s1); border:1px solid var(--b1); border-radius:16px;
+  padding:13px 15px; display:flex; align-items:center; justify-content:space-between;
+}
+.bs-left .bs-sub { font-size:9px; color:var(--t3); font-family:'DM Mono',monospace; letter-spacing:.1em; text-transform:uppercase; margin-bottom:1px; }
+.bs-left .bs-amount { font-family:'Clash Display',sans-serif; font-size:21px; color:var(--lime); }
+.bs-left .bs-of { font-size:11px; color:var(--t3); }
+.bs-macros { display:flex; gap:12px; }
+.mp { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.mp-val { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
+.mp-key { font-size:9px; color:var(--t3); letter-spacing:.08em; text-transform:uppercase; }
+.mp.p .mp-val { color:var(--lime); }
+.mp.c .mp-val { color:var(--blue); }
+.mp.f .mp-val { color:var(--orange); }
+
+/* Day chips */
+.day-scroll { display:flex; gap:7px; padding:14px 22px 0; overflow-x:auto; scrollbar-width:none; flex-shrink:0; }
+.day-scroll::-webkit-scrollbar { display:none; }
+.day-chip {
+  flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:7px 13px; border-radius:11px; border:1px solid var(--b1);
+  background:var(--s1); cursor:pointer; transition:all .18s; position:relative;
+}
+.day-chip.active { border-color:var(--lime); background:var(--lime-a); }
+.day-chip.locked { opacity:.4; border-style:dashed; }
+.dc-num { font-size:9px; color:var(--t3); font-family:'DM Mono',monospace; letter-spacing:.08em; text-transform:uppercase; }
+.dc-name { font-family:'Clash Display',sans-serif; font-size:14px; font-weight:600; color:var(--t2); }
+.day-chip.active .dc-name { color:var(--lime); }
+.day-chip.active .dc-num { color:var(--lime); opacity:.7; }
+.lock-icon { position:absolute; top:4px; right:4px; font-size:8px; }
+
+/* Day summary bar */
+.day-sum {
+  margin:12px 22px 0;
+  background:var(--s1); border:1px solid var(--b1); border-radius:14px;
+  padding:12px 14px; display:flex; align-items:center; gap:10px;
+}
+.ds-info { flex-shrink:0; }
+.ds-label { font-size:9px; color:var(--t3); text-transform:uppercase; letter-spacing:.1em; font-family:'DM Mono',monospace; }
+.ds-val { font-family:'Clash Display',sans-serif; font-size:18px; color:var(--text); }
+.ds-val em { color:var(--lime); font-style:normal; }
+.ds-bar-wrap { flex:1; }
+.ds-bar-sub { display:flex; justify-content:space-between; margin-bottom:3px; }
+.ds-bar-sub span { font-size:9px; color:var(--t3); font-family:'DM Mono',monospace; }
+.ds-track { height:5px; background:var(--s3); border-radius:3px; overflow:hidden; }
+.ds-fill { height:100%; background:var(--lime); border-radius:3px; transition:width .4s ease; }
+.ds-cost { flex-shrink:0; text-align:right; }
+.ds-cost-val { font-family:'Clash Display',sans-serif; font-size:17px; color:var(--text); }
+.ds-cost-key { font-size:9px; color:var(--t3); font-family:'DM Mono',monospace; }
+
+/* ── MEAL CARDS ── */
+.meals-wrap { padding:12px 22px 0; display:flex; flex-direction:column; gap:10px; }
+
+.meal-card {
+  background:var(--s1); border:1px solid var(--b1); border-radius:18px;
+  overflow:visible; transition:all .2s; position:relative;
+}
+.meal-card.locked-meal { border-color:var(--lime); background:rgba(181,242,61,0.04); }
+
+/* Lock badge */
+.lock-badge {
+  position:absolute; top:-8px; right:14px;
+  background:var(--lime); color:#0f0f0f;
+  font-size:9px; font-weight:700; font-family:'DM Mono',monospace;
+  padding:3px 9px; border-radius:20px; letter-spacing:.08em; text-transform:uppercase;
+  display:none;
+}
+.meal-card.locked-meal .lock-badge { display:block; }
+
+/* Card header */
+.mc-head { display:flex; align-items:center; justify-content:space-between; padding:13px 14px 8px; }
+.mc-badge { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:.12em; text-transform:uppercase; padding:3px 8px; border-radius:6px; font-weight:500; }
+.badge-b { background:var(--orange-a); color:var(--orange); }
+.badge-l { background:var(--lime-a); color:var(--lime); }
+.badge-d { background:var(--blue-a); color:var(--blue); }
+.badge-s { background:var(--purple-a); color:var(--purple); }
+.mc-kcal { font-family:'DM Mono',monospace; font-size:11px; color:var(--t3); }
+.mc-kcal em { color:var(--t2); font-style:normal; font-weight:500; }
+
+/* Card name + source */
+.mc-name { font-family:'Clash Display',sans-serif; font-size:16px; font-weight:600; color:var(--text); padding:0 14px 6px; line-height:1.2; }
+.mc-src { display:flex; align-items:center; gap:7px; padding:0 14px 10px; }
+.lidl-tag { display:flex; align-items:center; gap:4px; background:var(--lime-b); border:1px solid rgba(181,242,61,0.18); border-radius:5px; padding:2px 7px; }
+.lidl-tag span { font-size:9px; color:var(--lime); font-weight:500; }
+.tiktok-tag { display:flex; align-items:center; gap:4px; background:var(--red-a); border:1px solid rgba(255,71,87,0.2); border-radius:5px; padding:2px 7px; }
+.tiktok-tag span { font-size:9px; color:var(--red); font-weight:500; }
+.saved-tag { display:flex; align-items:center; gap:4px; background:var(--purple-a); border:1px solid rgba(196,127,255,0.2); border-radius:5px; padding:2px 7px; }
+.saved-tag span { font-size:9px; color:var(--purple); font-weight:500; }
+.mc-price { font-family:'DM Mono',monospace; font-size:11px; color:var(--t3); margin-left:auto; }
+.mc-price em { color:var(--t2); font-style:normal; }
+
+/* Macro row */
+.mc-macros { display:flex; border-top:1px solid var(--b1); }
+.mmb { flex:1; display:flex; flex-direction:column; align-items:center; padding:9px 0; gap:1px; border-right:1px solid var(--b1); }
+.mmb:last-child { border-right:none; }
+.mmb-val { font-family:'DM Mono',monospace; font-size:12px; font-weight:500; color:var(--text); }
+.mmb-key { font-size:8px; color:var(--t3); text-transform:uppercase; letter-spacing:.08em; }
+
+/* Action tray (appears on expand) */
+.mc-actions { display:none; border-top:1px solid var(--b1); }
+.meal-card.open .mc-actions { display:block; }
+
+/* Action buttons row */
+.action-row { display:flex; gap:0; border-bottom:1px solid var(--b1); }
+.act-btn {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:11px 8px; cursor:pointer; border-right:1px solid var(--b1);
+  transition:all .15s; background:none; border-top:none; border-bottom:none; border-left:none;
+}
+.act-btn:last-child { border-right:none; }
+.act-btn:hover { background:var(--s2); }
+.act-btn.active-act { background:var(--lime-a); }
+.act-btn.act-lock:hover { background:var(--lime-a); }
+.act-btn.locked-act { background:var(--lime-a); }
+.act-icon { font-size:17px; }
+.act-label { font-size:9px; color:var(--t2); font-family:'DM Mono',monospace; letter-spacing:.06em; text-transform:uppercase; }
+.act-btn.locked-act .act-label { color:var(--lime); }
+
+/* Ingredient editor */
+.ingredient-editor { padding:12px 14px; display:none; }
+.ingredient-editor.visible { display:block; }
+.ie-title { font-family:'DM Mono',monospace; font-size:9px; color:var(--t3); letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+.ie-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--b1); }
+.ie-row:last-child { border-bottom:none; }
+.ie-dot { width:6px; height:6px; border-radius:50%; background:var(--lime); flex-shrink:0; }
+.ie-name { flex:1; font-size:12px; color:var(--t2); }
+.ie-qty-wrap { display:flex; align-items:center; gap:6px; }
+.ie-qty-btn { width:22px; height:22px; border-radius:50%; background:var(--s3); border:1px solid var(--b2); color:var(--text); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; transition:all .15s; }
+.ie-qty-btn:hover { background:var(--s4); }
+.ie-qty-val { font-family:'DM Mono',monospace; font-size:11px; color:var(--text); min-width:34px; text-align:center; }
+.ie-price { font-family:'DM Mono',monospace; font-size:10px; color:var(--t3); min-width:32px; text-align:right; }
+
+/* Swap panel */
+.swap-panel { padding:12px 14px; display:none; }
+.swap-panel.visible { display:block; }
+.sp-title { font-family:'DM Mono',monospace; font-size:9px; color:var(--t3); letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+.sp-sources { display:flex; gap:6px; margin-bottom:10px; }
+.sp-src-btn {
+  flex:1; display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:8px; border-radius:10px; border:1px solid var(--b2);
+  background:var(--s2); cursor:pointer; transition:all .15s;
+}
+.sp-src-btn:hover { border-color:var(--b3); background:var(--s3); }
+.sp-src-btn.selected { border-color:var(--lime); background:var(--lime-a); }
+.sp-src-icon { font-size:14px; }
+.sp-src-label { font-size:10px; color:var(--t2); font-weight:500; }
+.sp-src-btn.selected .sp-src-label { color:var(--lime); }
+
+.swap-option {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 10px; border-radius:10px;
+  border:1px solid var(--b1); background:var(--s2);
+  cursor:pointer; margin-bottom:6px; transition:all .15s;
+}
+.swap-option:hover { border-color:var(--b2); background:var(--s3); }
+.swap-option:last-child { margin-bottom:0; }
+.so-emoji { font-size:18px; flex-shrink:0; }
+.so-info { flex:1; }
+.so-name { font-size:12px; color:var(--text); font-weight:500; }
+.so-meta { font-size:10px; color:var(--t3); }
+.so-tag { font-size:8px; padding:2px 6px; border-radius:4px; font-family:'DM Mono',monospace; flex-shrink:0; }
+.tag-lidl { background:var(--lime-b); color:var(--lime); border:1px solid rgba(181,242,61,0.2); }
+.tag-tok { background:var(--red-a); color:var(--red); border:1px solid rgba(255,71,87,0.15); }
+.tag-saved { background:var(--purple-a); color:var(--purple); border:1px solid rgba(196,127,255,0.15); }
+.tag-ai { background:var(--blue-a); color:var(--blue); border:1px solid rgba(77,159,255,0.15); }
+
+/* Log button */
+.log-btn {
+  margin:10px 14px 13px;
+  background:var(--lime); border:none; border-radius:11px;
+  padding:11px; width:calc(100% - 28px);
+  font-family:'DM Sans',sans-serif; font-size:13px; font-weight:700; color:#0f0f0f;
+  cursor:pointer; transition:all .15s;
+  display:flex; align-items:center; justify-content:center; gap:5px;
+}
+.log-btn:hover { background:#c8ff45; }
+.log-btn:active { transform:scale(.97); }
+
+/* ── TOAST ── */
+.toast {
+  position:absolute; top:62px; left:50%;
+  transform:translateX(-50%) translateY(-10px);
+  background:var(--lime); color:#0f0f0f;
+  font-size:12px; font-weight:700; font-family:'DM Sans',sans-serif;
+  padding:8px 18px; border-radius:20px;
+  opacity:0; transition:all .25s; white-space:nowrap; z-index:500; pointer-events:none;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ── FULL REGEN OVERLAY ── */
+.regen-overlay {
+  position:absolute; inset:0; z-index:300;
+  background:rgba(10,10,10,0.92); backdrop-filter:blur(8px);
+  display:none; flex-direction:column; padding:70px 24px 30px;
+}
+.regen-overlay.visible { display:flex; }
+.ro-title { font-family:'Clash Display',sans-serif; font-size:24px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.ro-sub { font-size:13px; color:var(--t2); margin-bottom:24px; }
+.ro-section { font-family:'DM Mono',monospace; font-size:9px; color:var(--t3); letter-spacing:.12em; text-transform:uppercase; margin-bottom:10px; }
+
+.ro-meal-row {
+  display:flex; align-items:center; gap:12px;
+  background:var(--s1); border:1px solid var(--b1); border-radius:12px;
+  padding:11px 13px; margin-bottom:8px;
+}
+.ro-meal-info { flex:1; }
+.ro-meal-name { font-size:13px; color:var(--text); font-weight:500; }
+.ro-meal-sub { font-size:10px; color:var(--t3); }
+.ro-lock-toggle {
+  width:36px; height:20px; border-radius:10px;
+  background:var(--s3); border:1px solid var(--b2);
+  position:relative; cursor:pointer; transition:all .2s; flex-shrink:0;
+}
+.ro-lock-toggle.on { background:var(--lime); border-color:var(--lime); }
+.ro-toggle-dot {
+  width:14px; height:14px; border-radius:50%; background:#fff;
+  position:absolute; top:2px; left:2px; transition:all .2s;
+  box-shadow:0 1px 3px rgba(0,0,0,0.4);
+}
+.ro-lock-toggle.on .ro-toggle-dot { left:18px; }
+
+.ro-actions { display:flex; gap:8px; margin-top:auto; }
+.ro-cancel {
+  flex:1; background:var(--s2); border:1px solid var(--b2);
+  border-radius:12px; padding:14px; font-family:'DM Sans',sans-serif;
+  font-size:14px; font-weight:600; color:var(--t2); cursor:pointer;
+}
+.ro-go {
+  flex:2; background:var(--lime); border:none;
+  border-radius:12px; padding:14px; font-family:'DM Sans',sans-serif;
+  font-size:14px; font-weight:700; color:#0f0f0f; cursor:pointer;
+  transition:all .15s;
+}
+.ro-go:hover { background:#c8ff45; }
+
+/* ── ANIMATIONS ── */
+@keyframes slideUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+.meal-card { animation:slideUp .3s ease both; }
+.meal-card:nth-child(1) { animation-delay:.04s; }
+.meal-card:nth-child(2) { animation-delay:.09s; }
+.meal-card:nth-child(3) { animation-delay:.14s; }
+.meal-card:nth-child(4) { animation-delay:.19s; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.pulsing { animation:pulse 1.2s ease infinite; }
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <div class="toast" id="toast"></div>
+
+  <!-- ══ PLAN SCREEN ══ -->
+  <div class="screen active" id="screen-plan">
+    <div class="plan-header">
+      <div class="plan-eyebrow">Week of May 5–11</div>
+      <div class="plan-title-row">
+        <div class="plan-title">Your Lidl<br>Meal Plan</div>
+        <button class="regen-btn" onclick="openRegenOverlay()">
+          <span class="regen-icon" id="regenIcon">↻</span>
+          <span>Rebuild</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Budget -->
+    <div class="budget-strip">
+      <div class="bs-left">
+        <div class="bs-sub">Est. weekly cost</div>
+        <div class="bs-amount" id="weekCost">€28.40</div>
+        <div class="bs-of">of €35 budget</div>
+      </div>
+      <div class="bs-macros">
+        <div class="mp p"><div class="mp-val" id="wkP">148g</div><div class="mp-key">Prot</div></div>
+        <div class="mp c"><div class="mp-val" id="wkC">210g</div><div class="mp-key">Carb</div></div>
+        <div class="mp f"><div class="mp-val" id="wkF">58g</div><div class="mp-key">Fat</div></div>
+      </div>
+    </div>
+
+    <!-- Day tabs -->
+    <div class="day-scroll">
+      <div class="day-chip active" onclick="selectDay(this,'Mon',1990,'€4.20',74)"><div class="dc-num">Day 1</div><div class="dc-name">Mon</div></div>
+      <div class="day-chip" onclick="selectDay(this,'Tue',2010,'€4.50',76)"><div class="dc-num">Day 2</div><div class="dc-name">Tue</div></div>
+      <div class="day-chip" onclick="selectDay(this,'Wed',1950,'€3.90',72)"><div class="dc-num">Day 3</div><div class="dc-name">Wed</div></div>
+      <div class="day-chip locked" onclick="showToast('🔒 Upgrade to Pro for full week!')"><div class="dc-num">Day 4</div><div class="dc-name">Thu</div><span class="lock-icon">🔒</span></div>
+      <div class="day-chip locked" onclick="showToast('🔒 Upgrade to Pro for full week!')"><div class="dc-num">Day 5</div><div class="dc-name">Fri</div><span class="lock-icon">🔒</span></div>
+      <div class="day-chip locked" onclick="showToast('🔒 Upgrade to Pro for full week!')"><div class="dc-num">Day 6</div><div class="dc-name">Sat</div><span class="lock-icon">🔒</span></div>
+      <div class="day-chip locked" onclick="showToast('🔒 Upgrade to Pro for full week!')"><div class="dc-num">Day 7</div><div class="dc-name">Sun</div><span class="lock-icon">🔒</span></div>
+    </div>
+
+    <!-- Day summary -->
+    <div class="day-sum">
+      <div class="ds-info">
+        <div class="ds-label">Monday</div>
+        <div class="ds-val"><em id="dayKcal">1,990</em> kcal</div>
+      </div>
+      <div class="ds-bar-wrap">
+        <div class="ds-bar-sub"><span>0</span><span>2,000</span></div>
+        <div class="ds-track"><div class="ds-fill" id="dayBar" style="width:74%"></div></div>
+      </div>
+      <div class="ds-cost">
+        <div class="ds-cost-val" id="dayCost">€4.20</div>
+        <div class="ds-cost-key">today</div>
+      </div>
+    </div>
+
+    <!-- Scrollable meals -->
+    <div class="scroll-body">
+      <div class="meals-wrap" id="mealsWrap">
+
+        <!-- BREAKFAST -->
+        <div class="meal-card" id="card-0" onclick="toggleCard(0)">
+          <div class="lock-badge">🔒 Locked</div>
+          <div class="mc-head">
+            <span class="mc-badge badge-b">Breakfast</span>
+            <span class="mc-kcal"><em>342</em> kcal</span>
+          </div>
+          <div class="mc-name">Greek Yogurt Bowl with Oats & Honey</div>
+          <div class="mc-src">
+            <div class="lidl-tag"><span>🟡 Lidl promo</span></div>
+            <div class="mc-price">€<em>1.10</em></div>
+          </div>
+          <div class="mc-macros">
+            <div class="mmb"><div class="mmb-val" style="color:var(--lime)">28g</div><div class="mmb-key">Protein</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--blue)">44g</div><div class="mmb-key">Carbs</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--orange)">6g</div><div class="mmb-key">Fat</div></div>
+            <div class="mmb"><div class="mmb-val">342</div><div class="mmb-key">kcal</div></div>
+          </div>
+          <div class="mc-actions">
+            <!-- Action buttons -->
+            <div class="action-row">
+              <button class="act-btn act-lock" onclick="toggleLock(event,0)" id="lockBtn-0">
+                <span class="act-icon">🔒</span><span class="act-label">Lock</span>
+              </button>
+              <button class="act-btn" onclick="togglePanel(event,0,'ingredients')">
+                <span class="act-icon">✏️</span><span class="act-label">Edit</span>
+              </button>
+              <button class="act-btn" onclick="togglePanel(event,0,'swap')">
+                <span class="act-icon">🔄</span><span class="act-label">Swap</span>
+              </button>
+              <button class="act-btn" onclick="logMeal(event,'Breakfast logged ✓')">
+                <span class="act-icon">✅</span><span class="act-label">Log</span>
+              </button>
+            </div>
+            <!-- Ingredient editor -->
+            <div class="ingredient-editor" id="ingredients-0">
+              <div class="ie-title">Ingredients — tap to adjust</div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Greek yogurt 0%</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">200g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.45</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Rolled oats</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-5,'g')">−</button>
+                  <div class="ie-qty-val">60g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,5,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.18</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Honey</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-1,'tbsp')">−</button>
+                  <div class="ie-qty-val">1 tbsp</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,1,'tbsp')">+</button>
+                </div>
+                <div class="ie-price">€0.22</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Banana</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-1,'')">−</button>
+                  <div class="ie-qty-val">1</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,1,'')">+</button>
+                </div>
+                <div class="ie-price">€0.25</div>
+              </div>
+            </div>
+            <!-- Swap panel -->
+            <div class="swap-panel" id="swap-0">
+              <div class="sp-title">Replace with</div>
+              <div class="sp-sources">
+                <div class="sp-src-btn selected" onclick="selectSource(this)">
+                  <span class="sp-src-icon">🤖</span><span class="sp-src-label">AI</span>
+                </div>
+                <div class="sp-src-btn" onclick="selectSource(this)">
+                  <span class="sp-src-icon">🟡</span><span class="sp-src-label">Lidl</span>
+                </div>
+                <div class="sp-src-btn" onclick="selectSource(this)">
+                  <span class="sp-src-icon">📱</span><span class="sp-src-label">TikTok</span>
+                </div>
+                <div class="sp-src-btn" onclick="selectSource(this)">
+                  <span class="sp-src-icon">💾</span><span class="sp-src-label">Saved</span>
+                </div>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,0,'Egg White Scramble + Toast','342 kcal · 31g P · 38g C · 8g F · €0.95')">
+                <span class="so-emoji">🥚</span>
+                <div class="so-info">
+                  <div class="so-name">Egg White Scramble + Toast</div>
+                  <div class="so-meta">342 kcal · 31g P · 38g C · 8g F · €0.95</div>
+                </div>
+                <span class="so-tag tag-lidl">LIDL</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,0,'Protein Pancakes','310 kcal · 34g P · 36g C · 5g F · €1.20')">
+                <span class="so-emoji">🥞</span>
+                <div class="so-info">
+                  <div class="so-name">Protein Pancakes</div>
+                  <div class="so-meta">310 kcal · 34g P · 36g C · 5g F · €1.20</div>
+                </div>
+                <span class="so-tag tag-ai">AI</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,0,'Viral Cottage Cheese Bowl','290 kcal · 28g P · 32g C · 7g F · €0.85')">
+                <span class="so-emoji">🥣</span>
+                <div class="so-info">
+                  <div class="so-name">Viral Cottage Cheese Bowl</div>
+                  <div class="so-meta">290 kcal · 28g P · 32g C · 7g F · €0.85</div>
+                </div>
+                <span class="so-tag tag-tok">TIKTOK</span>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event,'Breakfast logged ✓')">✓ Log this meal</button>
+          </div>
+        </div>
+
+        <!-- LUNCH -->
+        <div class="meal-card" id="card-1" onclick="toggleCard(1)">
+          <div class="lock-badge">🔒 Locked</div>
+          <div class="mc-head">
+            <span class="mc-badge badge-l">Lunch</span>
+            <span class="mc-kcal"><em>612</em> kcal</span>
+          </div>
+          <div class="mc-name">High-Protein Chicken Rice Bowl</div>
+          <div class="mc-src">
+            <div class="lidl-tag"><span>🟡 Lidl promo</span></div>
+            <div class="mc-price">€<em>1.80</em></div>
+          </div>
+          <div class="mc-macros">
+            <div class="mmb"><div class="mmb-val" style="color:var(--lime)">52g</div><div class="mmb-key">Protein</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--blue)">68g</div><div class="mmb-key">Carbs</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--orange)">14g</div><div class="mmb-key">Fat</div></div>
+            <div class="mmb"><div class="mmb-val">612</div><div class="mmb-key">kcal</div></div>
+          </div>
+          <div class="mc-actions">
+            <div class="action-row">
+              <button class="act-btn act-lock" onclick="toggleLock(event,1)" id="lockBtn-1">
+                <span class="act-icon">🔒</span><span class="act-label">Lock</span>
+              </button>
+              <button class="act-btn" onclick="togglePanel(event,1,'ingredients')">
+                <span class="act-icon">✏️</span><span class="act-label">Edit</span>
+              </button>
+              <button class="act-btn" onclick="togglePanel(event,1,'swap')">
+                <span class="act-icon">🔄</span><span class="act-label">Swap</span>
+              </button>
+              <button class="act-btn" onclick="logMeal(event,'Lunch logged ✓')">
+                <span class="act-icon">✅</span><span class="act-label">Log</span>
+              </button>
+            </div>
+            <div class="ingredient-editor" id="ingredients-1">
+              <div class="ie-title">Ingredients — tap to adjust</div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Chicken breast</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">180g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.98</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Basmati rice</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">100g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.22</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Broccoli</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">150g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.35</div>
+              </div>
+            </div>
+            <div class="swap-panel" id="swap-1">
+              <div class="sp-title">Replace with</div>
+              <div class="sp-sources">
+                <div class="sp-src-btn selected" onclick="selectSource(this)"><span class="sp-src-icon">🤖</span><span class="sp-src-label">AI</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">🟡</span><span class="sp-src-label">Lidl</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">📱</span><span class="sp-src-label">TikTok</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">💾</span><span class="sp-src-label">Saved</span></div>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,1,'Tuna & Quinoa Bowl','580 kcal · 48g P · 62g C · 12g F · €1.60')">
+                <span class="so-emoji">🐟</span>
+                <div class="so-info">
+                  <div class="so-name">Tuna & Quinoa Bowl</div>
+                  <div class="so-meta">580 kcal · 48g P · 62g C · 12g F · €1.60</div>
+                </div>
+                <span class="so-tag tag-lidl">LIDL</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,1,'Viral Spicy Tuna Rice','490 kcal · 38g P · 52g C · 14g F · €1.40')">
+                <span class="so-emoji">🍱</span>
+                <div class="so-info">
+                  <div class="so-name">Viral Spicy Tuna Rice</div>
+                  <div class="so-meta">490 kcal · 38g P · 52g C · 14g F · €1.40</div>
+                </div>
+                <span class="so-tag tag-tok">TIKTOK</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,1,'Turkey & Lentil Bowl','560 kcal · 46g P · 58g C · 10g F · €1.70')">
+                <span class="so-emoji">🥘</span>
+                <div class="so-info">
+                  <div class="so-name">Turkey & Lentil Bowl</div>
+                  <div class="so-meta">560 kcal · 46g P · 58g C · 10g F · €1.70</div>
+                </div>
+                <span class="so-tag tag-saved">SAVED</span>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event,'Lunch logged ✓')">✓ Log this meal</button>
+          </div>
+        </div>
+
+        <!-- SNACK -->
+        <div class="meal-card" id="card-2" onclick="toggleCard(2)">
+          <div class="lock-badge">🔒 Locked</div>
+          <div class="mc-head">
+            <span class="mc-badge badge-s">Snack</span>
+            <span class="mc-kcal"><em>210</em> kcal</span>
+          </div>
+          <div class="mc-name">Cottage Cheese + Almonds</div>
+          <div class="mc-src">
+            <div class="lidl-tag"><span>🟡 Lidl promo</span></div>
+            <div class="mc-price">€<em>0.65</em></div>
+          </div>
+          <div class="mc-macros">
+            <div class="mmb"><div class="mmb-val" style="color:var(--lime)">22g</div><div class="mmb-key">Protein</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--blue)">8g</div><div class="mmb-key">Carbs</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--orange)">11g</div><div class="mmb-key">Fat</div></div>
+            <div class="mmb"><div class="mmb-val">210</div><div class="mmb-key">kcal</div></div>
+          </div>
+          <div class="mc-actions">
+            <div class="action-row">
+              <button class="act-btn act-lock" onclick="toggleLock(event,2)" id="lockBtn-2"><span class="act-icon">🔒</span><span class="act-label">Lock</span></button>
+              <button class="act-btn" onclick="togglePanel(event,2,'ingredients')"><span class="act-icon">✏️</span><span class="act-label">Edit</span></button>
+              <button class="act-btn" onclick="togglePanel(event,2,'swap')"><span class="act-icon">🔄</span><span class="act-label">Swap</span></button>
+              <button class="act-btn" onclick="logMeal(event,'Snack logged ✓')"><span class="act-icon">✅</span><span class="act-label">Log</span></button>
+            </div>
+            <div class="ingredient-editor" id="ingredients-2">
+              <div class="ie-title">Ingredients — tap to adjust</div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Cottage cheese</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">150g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.42</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Almonds</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-5,'g')">−</button>
+                  <div class="ie-qty-val">20g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,5,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.23</div>
+              </div>
+            </div>
+            <div class="swap-panel" id="swap-2">
+              <div class="sp-title">Replace with</div>
+              <div class="sp-sources">
+                <div class="sp-src-btn selected" onclick="selectSource(this)"><span class="sp-src-icon">🤖</span><span class="sp-src-label">AI</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">🟡</span><span class="sp-src-label">Lidl</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">📱</span><span class="sp-src-label">TikTok</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">💾</span><span class="sp-src-label">Saved</span></div>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,2,'Protein Bar + Apple','220 kcal · 20g P · 28g C · 5g F · €0.80')">
+                <span class="so-emoji">🍎</span>
+                <div class="so-info">
+                  <div class="so-name">Protein Bar + Apple</div>
+                  <div class="so-meta">220 kcal · 20g P · 28g C · 5g F · €0.80</div>
+                </div>
+                <span class="so-tag tag-lidl">LIDL</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,2,'Boiled Eggs x2','180 kcal · 14g P · 1g C · 12g F · €0.50')">
+                <span class="so-emoji">🥚</span>
+                <div class="so-info">
+                  <div class="so-name">Boiled Eggs ×2</div>
+                  <div class="so-meta">180 kcal · 14g P · 1g C · 12g F · €0.50</div>
+                </div>
+                <span class="so-tag tag-ai">AI</span>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event,'Snack logged ✓')">✓ Log this meal</button>
+          </div>
+        </div>
+
+        <!-- DINNER -->
+        <div class="meal-card" id="card-3" onclick="toggleCard(3)">
+          <div class="lock-badge">🔒 Locked</div>
+          <div class="mc-head">
+            <span class="mc-badge badge-d">Dinner</span>
+            <span class="mc-kcal"><em>680</em> kcal</span>
+          </div>
+          <div class="mc-name">Baked Salmon + Sweet Potato Mash</div>
+          <div class="mc-src">
+            <div class="lidl-tag"><span>🟡 Lidl promo</span></div>
+            <div class="tiktok-tag"><span>📱 from TikTok</span></div>
+            <div class="mc-price">€<em>2.10</em></div>
+          </div>
+          <div class="mc-macros">
+            <div class="mmb"><div class="mmb-val" style="color:var(--lime)">46g</div><div class="mmb-key">Protein</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--blue)">52g</div><div class="mmb-key">Carbs</div></div>
+            <div class="mmb"><div class="mmb-val" style="color:var(--orange)">22g</div><div class="mmb-key">Fat</div></div>
+            <div class="mmb"><div class="mmb-val">680</div><div class="mmb-key">kcal</div></div>
+          </div>
+          <div class="mc-actions">
+            <div class="action-row">
+              <button class="act-btn act-lock" onclick="toggleLock(event,3)" id="lockBtn-3"><span class="act-icon">🔒</span><span class="act-label">Lock</span></button>
+              <button class="act-btn" onclick="togglePanel(event,3,'ingredients')"><span class="act-icon">✏️</span><span class="act-label">Edit</span></button>
+              <button class="act-btn" onclick="togglePanel(event,3,'swap')"><span class="act-icon">🔄</span><span class="act-label">Swap</span></button>
+              <button class="act-btn" onclick="logMeal(event,'Dinner logged ✓')"><span class="act-icon">✅</span><span class="act-label">Log</span></button>
+            </div>
+            <div class="ingredient-editor" id="ingredients-3">
+              <div class="ie-title">Ingredients — tap to adjust</div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Salmon fillet</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-10,'g')">−</button>
+                  <div class="ie-qty-val">150g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,10,'g')">+</button>
+                </div>
+                <div class="ie-price">€1.40</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Sweet potato</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-25,'g')">−</button>
+                  <div class="ie-qty-val">200g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,25,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.30</div>
+              </div>
+              <div class="ie-row">
+                <div class="ie-dot"></div>
+                <div class="ie-name">Green beans</div>
+                <div class="ie-qty-wrap">
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,-25,'g')">−</button>
+                  <div class="ie-qty-val">100g</div>
+                  <button class="ie-qty-btn" onclick="adjustQty(event,this,25,'g')">+</button>
+                </div>
+                <div class="ie-price">€0.25</div>
+              </div>
+            </div>
+            <div class="swap-panel" id="swap-3">
+              <div class="sp-title">Replace with</div>
+              <div class="sp-sources">
+                <div class="sp-src-btn selected" onclick="selectSource(this)"><span class="sp-src-icon">🤖</span><span class="sp-src-label">AI</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">🟡</span><span class="sp-src-label">Lidl</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">📱</span><span class="sp-src-label">TikTok</span></div>
+                <div class="sp-src-btn" onclick="selectSource(this)"><span class="sp-src-icon">💾</span><span class="sp-src-label">Saved</span></div>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,3,'Beef Stir-Fry + Rice','640 kcal · 44g P · 58g C · 18g F · €2.20')">
+                <span class="so-emoji">🥩</span>
+                <div class="so-info">
+                  <div class="so-name">Beef Stir-Fry + Rice</div>
+                  <div class="so-meta">640 kcal · 44g P · 58g C · 18g F · €2.20</div>
+                </div>
+                <span class="so-tag tag-lidl">LIDL</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,3,'Viral Marry Me Chicken','710 kcal · 48g P · 44g C · 24g F · €1.90')">
+                <span class="so-emoji">🍗</span>
+                <div class="so-info">
+                  <div class="so-name">Viral Marry Me Chicken</div>
+                  <div class="so-meta">710 kcal · 48g P · 44g C · 24g F · €1.90</div>
+                </div>
+                <span class="so-tag tag-tok">TIKTOK</span>
+              </div>
+              <div class="swap-option" onclick="swapMeal(event,3,'Lemon Cod + Couscous','590 kcal · 42g P · 60g C · 14g F · €1.75')">
+                <span class="so-emoji">🐟</span>
+                <div class="so-info">
+                  <div class="so-name">Lemon Cod + Couscous</div>
+                  <div class="so-meta">590 kcal · 42g P · 60g C · 14g F · €1.75</div>
+                </div>
+                <span class="so-tag tag-saved">SAVED</span>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event,'Dinner logged ✓')">✓ Log this meal</button>
+          </div>
+        </div>
+
+      </div><!-- /meals-wrap -->
+    </div><!-- /scroll-body -->
+
+    <!-- Tab bar -->
+    <div class="tabbar">
+      <div class="tb-item" onclick="showToast('Today tab')"><div class="tb-icon">🏠</div><div class="tb-label">Today</div></div>
+      <div class="tb-item active"><div class="tb-icon">🛒</div><div class="tb-label">Plan</div></div>
+      <div class="tb-item" onclick="showToast('Recipes tab')"><div class="tb-icon">📱</div><div class="tb-label">Recipes</div></div>
+      <div class="tb-item" onclick="showToast('List tab')"><div class="tb-icon">📋</div><div class="tb-label">List</div></div>
+      <div class="tb-item" onclick="showToast('Progress tab')"><div class="tb-icon">📊</div><div class="tb-label">Progress</div></div>
+    </div>
+  </div><!-- /screen-plan -->
+
+  <!-- ══ FULL REBUILD OVERLAY ══ -->
+  <div class="regen-overlay" id="regenOverlay">
+    <div class="ro-title">Rebuild Plan</div>
+    <div class="ro-sub">Lock meals to keep. The rest gets regenerated with this week's Lidl promos.</div>
+
+    <div class="ro-section">Monday's meals</div>
+
+    <div class="ro-meal-row">
+      <div style="font-size:20px">🥣</div>
+      <div class="ro-meal-info">
+        <div class="ro-meal-name" id="ro-name-0">Greek Yogurt Bowl</div>
+        <div class="ro-meal-sub">Breakfast · 342 kcal</div>
+      </div>
+      <div class="ro-lock-toggle" id="ro-toggle-0" onclick="roToggle(0)">
+        <div class="ro-toggle-dot"></div>
+      </div>
+    </div>
+
+    <div class="ro-meal-row">
+      <div style="font-size:20px">🍚</div>
+      <div class="ro-meal-info">
+        <div class="ro-meal-name" id="ro-name-1">Chicken Rice Bowl</div>
+        <div class="ro-meal-sub">Lunch · 612 kcal</div>
+      </div>
+      <div class="ro-lock-toggle" id="ro-toggle-1" onclick="roToggle(1)">
+        <div class="ro-toggle-dot"></div>
+      </div>
+    </div>
+
+    <div class="ro-meal-row">
+      <div style="font-size:20px">🧀</div>
+      <div class="ro-meal-info">
+        <div class="ro-meal-name" id="ro-name-2">Cottage Cheese + Almonds</div>
+        <div class="ro-meal-sub">Snack · 210 kcal</div>
+      </div>
+      <div class="ro-lock-toggle" id="ro-toggle-2" onclick="roToggle(2)">
+        <div class="ro-toggle-dot"></div>
+      </div>
+    </div>
+
+    <div class="ro-meal-row">
+      <div style="font-size:20px">🍣</div>
+      <div class="ro-meal-info">
+        <div class="ro-meal-name" id="ro-name-3">Baked Salmon + Sweet Potato</div>
+        <div class="ro-meal-sub">Dinner · 680 kcal</div>
+      </div>
+      <div class="ro-lock-toggle on" id="ro-toggle-3" onclick="roToggle(3)">
+        <div class="ro-toggle-dot"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; background:var(--s1); border:1px solid var(--b1); border-radius:12px; padding:11px 13px;">
+      <div style="font-size:11px; color:var(--t3); margin-bottom:6px; font-family:'DM Mono',monospace; letter-spacing:.08em; text-transform:uppercase;">Source for new meals</div>
+      <div style="display:flex; gap:6px;">
+        <div style="flex:1; background:var(--lime-a); border:1px solid var(--lime); border-radius:8px; padding:7px; text-align:center; font-size:11px; color:var(--lime); font-weight:600; cursor:pointer;">🟡 Lidl promos</div>
+        <div style="flex:1; background:var(--s2); border:1px solid var(--b2); border-radius:8px; padding:7px; text-align:center; font-size:11px; color:var(--t2); cursor:pointer;" onclick="this.style.background='var(--blue-a)'; this.style.borderColor='var(--blue)'; this.style.color='var(--blue)'">📱 + TikTok</div>
+        <div style="flex:1; background:var(--s2); border:1px solid var(--b2); border-radius:8px; padding:7px; text-align:center; font-size:11px; color:var(--t2); cursor:pointer;" onclick="this.style.background='var(--purple-a)'; this.style.borderColor='var(--purple)'; this.style.color='var(--purple)'">💾 + Saved</div>
+      </div>
+    </div>
+
+    <div class="ro-actions">
+      <button class="ro-cancel" onclick="closeRegenOverlay()">Cancel</button>
+      <button class="ro-go" onclick="doRegen()">↻ Regenerate unlocked</button>
+    </div>
+  </div>
+
+</div><!-- /phone -->
+
+<script>
+// ── STATE ──
+const openCards = new Set();
+const openPanels = {}; // cardId -> 'ingredients' | 'swap' | null
+const lockedCards = new Set();
+const roLocks = new Set([3]); // dinner locked by default in overlay
+
+// ── CARD TOGGLE ──
+function toggleCard(id) {
+  const card = document.getElementById('card-' + id);
+  if (openCards.has(id)) {
+    openCards.delete(id);
+    card.classList.remove('open');
+    closePanels(id);
+  } else {
+    openCards.add(id);
+    card.classList.add('open');
+  }
+}
+
+function closePanels(id) {
+  const ie = document.getElementById('ingredients-' + id);
+  const sp = document.getElementById('swap-' + id);
+  if (ie) ie.classList.remove('visible');
+  if (sp) sp.classList.remove('visible');
+  openPanels[id] = null;
+}
+
+// ── PANEL TOGGLE ──
+function togglePanel(e, id, type) {
+  e.stopPropagation();
+  const panel = document.getElementById(type === 'ingredients' ? 'ingredients-' + id : 'swap-' + id);
+  const other = document.getElementById(type === 'ingredients' ? 'swap-' + id : 'ingredients-' + id);
+  if (other) other.classList.remove('visible');
+
+  if (openPanels[id] === type) {
+    panel.classList.remove('visible');
+    openPanels[id] = null;
+  } else {
+    panel.classList.add('visible');
+    openPanels[id] = type;
+  }
+}
+
+// ── LOCK TOGGLE (on card) ──
+function toggleLock(e, id) {
+  e.stopPropagation();
+  const card = document.getElementById('card-' + id);
+  const btn = document.getElementById('lockBtn-' + id);
+  if (lockedCards.has(id)) {
+    lockedCards.delete(id);
+    card.classList.remove('locked-meal');
+    btn.classList.remove('locked-act');
+    btn.querySelector('.act-label').textContent = 'Lock';
+    showToast('Meal unlocked');
+  } else {
+    lockedCards.add(id);
+    card.classList.add('locked-meal');
+    btn.classList.add('locked-act');
+    btn.querySelector('.act-label').textContent = 'Locked';
+    showToast('🔒 Meal locked — won\'t change on rebuild');
+  }
+  // sync to overlay
+  const roT = document.getElementById('ro-toggle-' + id);
+  if (roT) {
+    if (lockedCards.has(id)) roT.classList.add('on');
+    else roT.classList.remove('on');
+  }
+}
+
+// ── QTY ADJUST ──
+function adjustQty(e, btn, delta, unit) {
+  e.stopPropagation();
+  const valEl = btn.parentElement.querySelector('.ie-qty-val');
+  const current = valEl.textContent;
+  const num = parseFloat(current) || 0;
+  let newNum = Math.max(0, num + delta);
+  if (unit === 'tbsp' || unit === '') {
+    valEl.textContent = newNum + (unit ? ' ' + unit : '');
+  } else {
+    valEl.textContent = newNum + unit;
+  }
+  showToast('Macros recalculated ↻');
+}
+
+// ── SOURCE SELECT (swap panel) ──
+function selectSource(el) {
+  const parent = el.parentElement;
+  parent.querySelectorAll('.sp-src-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// ── SWAP MEAL ──
+function swapMeal(e, id, name, meta) {
+  e.stopPropagation();
+  const card = document.getElementById('card-' + id);
+  card.querySelector('.mc-name').textContent = name;
+  closePanels(id);
+  // Update overlay name too
+  const roName = document.getElementById('ro-name-' + id);
+  if (roName) roName.textContent = name.length > 22 ? name.slice(0,22) + '…' : name;
+  showToast('✓ Swapped to ' + name.split(' ').slice(0,3).join(' '));
+}
+
+// ── LOG MEAL ──
+function logMeal(e, msg) {
+  e.stopPropagation();
+  showToast(msg);
+}
+
+// ── DAY SELECT ──
+function selectDay(el, name, kcal, cost, pct) {
+  document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('active'));
+  if (!el.classList.contains('locked')) {
+    el.classList.add('active');
+    document.getElementById('dayKcal').textContent = kcal.toLocaleString();
+    document.getElementById('dayCost').textContent = cost;
+    document.getElementById('dayBar').style.width = pct + '%';
+    document.querySelector('.ds-info .ds-label').textContent = name;
+  }
+}
+
+// ── REGEN OVERLAY ──
+function openRegenOverlay() {
+  document.getElementById('regenOverlay').classList.add('visible');
+}
+function closeRegenOverlay() {
+  document.getElementById('regenOverlay').classList.remove('visible');
+}
+
+function roToggle(id) {
+  const t = document.getElementById('ro-toggle-' + id);
+  if (roLocks.has(id)) {
+    roLocks.delete(id);
+    t.classList.remove('on');
+    lockedCards.delete(id);
+    document.getElementById('card-' + id).classList.remove('locked-meal');
+    const btn = document.getElementById('lockBtn-' + id);
+    if (btn) { btn.classList.remove('locked-act'); btn.querySelector('.act-label').textContent = 'Lock'; }
+  } else {
+    roLocks.add(id);
+    t.classList.add('on');
+    lockedCards.add(id);
+    document.getElementById('card-' + id).classList.add('locked-meal');
+    const btn = document.getElementById('lockBtn-' + id);
+    if (btn) { btn.classList.add('locked-act'); btn.querySelector('.act-label').textContent = 'Locked'; }
+  }
+}
+
+function doRegen() {
+  closeRegenOverlay();
+  const icon = document.getElementById('regenIcon');
+  icon.classList.add('spin');
+  showToast('↻ Regenerating ' + (4 - roLocks.size) + ' meals…');
+  setTimeout(() => {
+    icon.classList.remove('spin');
+    showToast('✓ Plan updated with Lidl promos!');
+  }, 1200);
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>

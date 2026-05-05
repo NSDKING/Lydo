@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cal Counter — Plan Screen MVP</title>
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg: #0f0f0f;
+  --surface: #181818;
+  --surface2: #222222;
+  --surface3: #2a2a2a;
+  --border: #2e2e2e;
+  --border2: #3a3a3a;
+  --lime: #b5f23d;
+  --lime-dim: rgba(181,242,61,0.12);
+  --lime-dim2: rgba(181,242,61,0.06);
+  --orange: #ff6b35;
+  --orange-dim: rgba(255,107,53,0.12);
+  --blue: #4d9fff;
+  --blue-dim: rgba(77,159,255,0.10);
+  --red: #ff4757;
+  --red-dim: rgba(255,71,87,0.12);
+  --text: #f0f0ee;
+  --text2: #a0a09e;
+  --text3: #5a5a58;
+  --white: #ffffff;
+  --phone-w: 390px;
+  --phone-h: 844px;
+}
+
+body {
+  background: #080808;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Sans', sans-serif;
+  padding: 40px 20px;
+  gap: 60px;
+  flex-wrap: wrap;
+}
+
+/* ── PHONE SHELL ── */
+.phone-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.phone-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #444;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.phone {
+  width: var(--phone-w);
+  height: var(--phone-h);
+  background: var(--bg);
+  border-radius: 52px;
+  border: 1.5px solid #2a2a2a;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 0 0 1px #111,
+    0 40px 120px rgba(0,0,0,0.9),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* ── STATUS BAR ── */
+.status-bar {
+  height: 50px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 28px 8px;
+}
+
+.status-time {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-icons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-icons svg { fill: var(--text); }
+
+/* ── SCROLLABLE CONTENT ── */
+.screen {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: none;
+  flex-direction: column;
+}
+.screen::-webkit-scrollbar { display: none; }
+.screen.active { display: flex; }
+
+/* ── TAB BAR ── */
+.tab-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 84px;
+  background: rgba(15,15,15,0.96);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 12px;
+  z-index: 100;
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 16px;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.tab-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: transform 0.2s;
+}
+
+.tab-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text3);
+  transition: color 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.tab-item.active .tab-label { color: var(--lime); }
+.tab-item.active .tab-icon { transform: scale(1.1); }
+
+/* ── PLAN SCREEN ── */
+.plan-header {
+  padding: 58px 24px 0;
+}
+
+.plan-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.plan-week-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lime);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.plan-title {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.regen-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: all 0.18s;
+  margin-top: 4px;
+}
+.regen-btn:hover { border-color: var(--lime); background: var(--lime-dim); }
+.regen-btn span { font-size: 12px; color: var(--text2); font-weight: 500; }
+
+/* ── BUDGET STRIP ── */
+.budget-strip {
+  margin: 16px 24px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.budget-left { display: flex; flex-direction: column; }
+.budget-sublabel { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+.budget-amount { font-family: 'Clash Display', sans-serif; font-size: 22px; font-weight: 600; color: var(--lime); }
+.budget-total { font-size: 12px; color: var(--text3); }
+
+.budget-macros {
+  display: flex;
+  gap: 12px;
+}
+
+.macro-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.macro-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.macro-key {
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.macro-pill.protein .macro-val { color: var(--lime); }
+.macro-pill.carbs .macro-val { color: var(--blue); }
+.macro-pill.fat .macro-val { color: var(--orange); }
+
+/* ── DAY TABS ── */
+.day-scroll {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.day-scroll::-webkit-scrollbar { display: none; }
+
+.day-chip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.day-chip.active {
+  border-color: var(--lime);
+  background: var(--lime-dim);
+}
+
+.day-chip-label {
+  font-size: 10px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day-chip-name {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.day-chip.active .day-chip-name { color: var(--lime); }
+.day-chip.active .day-chip-label { color: var(--lime); opacity: 0.7; }
+
+/* ── MEAL CARDS ── */
+.meals-section {
+  padding: 16px 24px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.meal-card:active { transform: scale(0.98); }
+
+.meal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+}
+
+.meal-type-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.badge-breakfast { background: var(--orange-dim); color: var(--orange); }
+.badge-lunch { background: var(--lime-dim); color: var(--lime); }
+.badge-dinner { background: var(--blue-dim); color: var(--blue); }
+.badge-snack { background: rgba(180,100,255,0.12); color: #c47fff; }
+
+.meal-kcal {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.meal-kcal span { color: var(--text2); font-weight: 500; }
+
+.meal-name {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0 16px 6px;
+  line-height: 1.2;
+}
+
+.meal-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+
+.lidl-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--lime-dim2);
+  border: 1px solid rgba(181,242,61,0.2);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+.lidl-tag-text {
+  font-size: 10px;
+  color: var(--lime);
+  font-weight: 500;
+}
+
+.price-tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+  margin-left: auto;
+}
+
+.price-tag span { color: var(--text2); }
+
+.meal-macros-row {
+  display: flex;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.macro-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+}
+.macro-block:last-child { border-right: none; }
+
+.macro-block-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.macro-block-label {
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.meal-card.expanded .meal-detail { display: block; }
+.meal-detail { display: none; }
+
+.meal-ingredients {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ingredient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ingredient-name {
+  font-size: 13px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ingredient-lidl-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--lime);
+  flex-shrink: 0;
+}
+
+.ingredient-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.log-btn {
+  margin: 10px 16px 14px;
+  background: var(--lime);
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  width: calc(100% - 32px);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f0f0f;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.log-btn:hover { background: #c8ff45; }
+.log-btn:active { transform: scale(0.97); }
+
+/* ── DAY SUMMARY FOOTER ── */
+.day-summary {
+  margin: 0 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.day-summary-left .ds-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; font-family: 'DM Mono', monospace; }
+.day-summary-left .ds-val { font-family: 'Clash Display', sans-serif; font-size: 20px; color: var(--text); }
+.day-summary-left .ds-val span { color: var(--lime); }
+
+.ds-bar-wrap { flex: 1; margin: 0 16px; }
+.ds-bar-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.ds-bar-label span { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.ds-bar-track { height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+.ds-bar-fill { height: 100%; background: var(--lime); border-radius: 3px; width: 74%; }
+
+.ds-cost { font-family: 'Clash Display', sans-serif; font-size: 18px; color: var(--text); text-align: right; }
+.ds-cost-label { font-size: 10px; color: var(--text3); text-align: right; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; }
+
+/* ── SHOPPING LIST SCREEN ── */
+.sl-header {
+  padding: 58px 24px 16px;
+}
+
+.sl-title {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.sl-sub { font-size: 13px; color: var(--text3); }
+
+.sl-promo-banner {
+  margin: 0 24px 16px;
+  background: var(--lime-dim);
+  border: 1px solid rgba(181,242,61,0.3);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sl-promo-text { font-size: 12px; color: var(--lime); font-weight: 500; }
+.sl-promo-text span { color: var(--text2); font-weight: 400; }
+
+.sl-section-label {
+  padding: 0 24px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sl-items {
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.sl-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sl-item:hover { border-color: var(--border); }
+.sl-item.checked { opacity: 0.45; }
+
+.sl-check {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.sl-item.checked .sl-check {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.sl-check-tick { display: none; font-size: 10px; color: #0f0f0f; }
+.sl-item.checked .sl-check-tick { display: block; }
+
+.sl-item-name { font-size: 14px; color: var(--text); flex: 1; }
+.sl-item.checked .sl-item-name { text-decoration: line-through; color: var(--text3); }
+
+.sl-item-qty { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); }
+
+.sl-item-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--text2);
+  text-align: right;
+  min-width: 40px;
+}
+
+.sl-item-lidl { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); flex-shrink: 0; }
+.sl-item-other { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+
+.sl-total-row {
+  margin: 0 24px 100px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sl-total-label { font-size: 13px; color: var(--text2); font-weight: 500; }
+.sl-total-amount { font-family: 'Clash Display', sans-serif; font-size: 22px; color: var(--lime); }
+
+/* ── TODAY SCREEN ── */
+.today-header {
+  padding: 58px 24px 0;
+}
+.today-greeting { font-size: 13px; color: var(--text3); margin-bottom: 2px; }
+.today-title { font-family: 'Clash Display', sans-serif; font-size: 28px; font-weight: 700; color: var(--text); }
+
+.calorie-ring-wrap {
+  margin: 20px auto 0;
+  width: 180px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+svg.ring { transform: rotate(-90deg); }
+.ring-center {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ring-cal { font-family: 'Clash Display', sans-serif; font-size: 32px; font-weight: 700; color: var(--text); }
+.ring-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; font-family: 'DM Mono', monospace; }
+.ring-remain { font-size: 12px; color: var(--lime); font-weight: 500; }
+
+.macro-bars {
+  display: flex;
+  gap: 10px;
+  padding: 20px 24px 0;
+}
+.macro-bar-item { flex: 1; }
+.macro-bar-top { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.macro-bar-name { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; font-family: 'DM Mono', monospace; }
+.macro-bar-val { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2); }
+.macro-bar-track { height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.macro-bar-fill { height: 100%; border-radius: 3px; }
+.fill-p { background: var(--lime); width: 62%; }
+.fill-c { background: var(--blue); width: 55%; }
+.fill-f { background: var(--orange); width: 71%; }
+
+.today-meals-label {
+  padding: 20px 24px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.today-meal-row {
+  margin: 0 24px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.tme-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tme-b { background: var(--orange); }
+.tme-l { background: var(--lime); }
+.tme-d { background: var(--blue); }
+.tme-name { flex: 1; font-size: 14px; color: var(--text); }
+.tme-kcal { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); }
+.tme-log {
+  background: var(--surface3);
+  border: none; border-radius: 8px;
+  padding: 5px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px; font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.meal-card { animation: slideUp 0.3s ease both; }
+.meal-card:nth-child(1) { animation-delay: 0.05s; }
+.meal-card:nth-child(2) { animation-delay: 0.10s; }
+.meal-card:nth-child(3) { animation-delay: 0.15s; }
+.meal-card:nth-child(4) { animation-delay: 0.20s; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning { animation: spin 0.7s linear; }
+
+/* ── NOTIFICATION TOAST ── */
+.toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--lime);
+  color: #0f0f0f;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  padding: 8px 18px;
+  border-radius: 20px;
+  opacity: 0;
+  transition: all 0.3s;
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+  PHONE 1 — PLAN SCREEN (main)
+════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Plan Screen</div>
+  <div class="phone" id="phone1">
+
+    <div class="toast" id="toast1"></div>
+
+    <!-- TODAY SCREEN -->
+    <div class="screen" id="s1-today">
+      <div class="today-header">
+        <div class="today-greeting">Good morning, Alex 👊</div>
+        <div class="today-title">Monday</div>
+      </div>
+
+      <div class="calorie-ring-wrap">
+        <svg class="ring" width="180" height="180" viewBox="0 0 180 180">
+          <circle cx="90" cy="90" r="76" fill="none" stroke="#222" stroke-width="10"/>
+          <circle cx="90" cy="90" r="76" fill="none" stroke="#b5f23d" stroke-width="10"
+            stroke-dasharray="477.5" stroke-dashoffset="172" stroke-linecap="round"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-cal">1,284</div>
+          <div class="ring-label">kcal eaten</div>
+          <div class="ring-remain">706 remaining</div>
+        </div>
+      </div>
+
+      <div class="macro-bars">
+        <div class="macro-bar-item">
+          <div class="macro-bar-top">
+            <span class="macro-bar-name">Protein</span>
+            <span class="macro-bar-val">93g</span>
+          </div>
+          <div class="macro-bar-track"><div class="macro-bar-fill fill-p"></div></div>
+        </div>
+        <div class="macro-bar-item">
+          <div class="macro-bar-top">
+            <span class="macro-bar-name">Carbs</span>
+            <span class="macro-bar-val">148g</span>
+          </div>
+          <div class="macro-bar-track"><div class="macro-bar-fill fill-c"></div></div>
+        </div>
+        <div class="macro-bar-item">
+          <div class="macro-bar-top">
+            <span class="macro-bar-name">Fat</span>
+            <span class="macro-bar-val">38g</span>
+          </div>
+          <div class="macro-bar-track"><div class="macro-bar-fill fill-f"></div></div>
+        </div>
+      </div>
+
+      <div class="today-meals-label">Today's Plan</div>
+      <div class="today-meal-row">
+        <div class="tme-dot tme-b"></div>
+        <div class="tme-name">Greek Yogurt + Oats</div>
+        <div class="tme-kcal">342 kcal</div>
+        <button class="tme-log">✓ Logged</button>
+      </div>
+      <div class="today-meal-row">
+        <div class="tme-dot tme-l"></div>
+        <div class="tme-name">Chicken Rice Bowl</div>
+        <div class="tme-kcal">612 kcal</div>
+        <button class="tme-log">✓ Logged</button>
+      </div>
+      <div class="today-meal-row" style="border-color: var(--lime); background: var(--lime-dim2);">
+        <div class="tme-dot tme-d"></div>
+        <div class="tme-name">Salmon + Sweet Potato</div>
+        <div class="tme-kcal">680 kcal</div>
+        <button class="tme-log" style="background: var(--lime); color: #0f0f0f;">Log</button>
+      </div>
+    </div>
+
+    <!-- PLAN SCREEN -->
+    <div class="screen active" id="s1-plan">
+      <div class="plan-header">
+        <div class="plan-week-label">Week of May 5–11</div>
+        <div class="plan-top">
+          <div class="plan-title">Your Lidl<br>Meal Plan</div>
+          <button class="regen-btn" onclick="regenPlan()">
+            <span id="regenIcon">↻</span>
+            <span>Regenerate</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Budget strip -->
+      <div class="budget-strip">
+        <div class="budget-left">
+          <div class="budget-sublabel">Est. weekly cost</div>
+          <div class="budget-amount">€28.40</div>
+          <div class="budget-total">of €35 budget</div>
+        </div>
+        <div class="budget-macros">
+          <div class="macro-pill protein">
+            <div class="macro-val">148g</div>
+            <div class="macro-key">Prot</div>
+          </div>
+          <div class="macro-pill carbs">
+            <div class="macro-val">210g</div>
+            <div class="macro-key">Carb</div>
+          </div>
+          <div class="macro-pill fat">
+            <div class="macro-val">58g</div>
+            <div class="macro-key">Fat</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Day tabs -->
+      <div class="day-scroll" id="dayScroll">
+        <div class="day-chip active" onclick="selectDay(this, 'Mon')">
+          <div class="day-chip-label">Day 1</div>
+          <div class="day-chip-name">Mon</div>
+        </div>
+        <div class="day-chip" onclick="selectDay(this, 'Tue')">
+          <div class="day-chip-label">Day 2</div>
+          <div class="day-chip-name">Tue</div>
+        </div>
+        <div class="day-chip" onclick="selectDay(this, 'Wed')">
+          <div class="day-chip-label">Day 3</div>
+          <div class="day-chip-name">Wed</div>
+        </div>
+        <div class="day-chip locked" onclick="showPaywall()" style="opacity:0.4; border-style:dashed; position:relative;">
+          <div class="day-chip-label">Day 4</div>
+          <div class="day-chip-name">Thu 🔒</div>
+        </div>
+        <div class="day-chip locked" onclick="showPaywall()" style="opacity:0.4; border-style:dashed;">
+          <div class="day-chip-label">Day 5</div>
+          <div class="day-chip-name">Fri 🔒</div>
+        </div>
+        <div class="day-chip locked" onclick="showPaywall()" style="opacity:0.4; border-style:dashed;">
+          <div class="day-chip-label">Day 6</div>
+          <div class="day-chip-name">Sat 🔒</div>
+        </div>
+        <div class="day-chip locked" onclick="showPaywall()" style="opacity:0.4; border-style:dashed;">
+          <div class="day-chip-label">Day 7</div>
+          <div class="day-chip-name">Sun 🔒</div>
+        </div>
+      </div>
+
+      <!-- Day summary -->
+      <div class="day-summary" style="margin-top:14px;">
+        <div class="day-summary-left">
+          <div class="ds-label">Monday</div>
+          <div class="ds-val"><span id="dayKcal">1,990</span> kcal</div>
+        </div>
+        <div class="ds-bar-wrap">
+          <div class="ds-bar-label">
+            <span>0</span>
+            <span>2,000</span>
+          </div>
+          <div class="ds-bar-track">
+            <div class="ds-bar-fill" id="dayBar"></div>
+          </div>
+        </div>
+        <div>
+          <div class="ds-cost" id="dayCost">€4.20</div>
+          <div class="ds-cost-label">today's cost</div>
+        </div>
+      </div>
+
+      <!-- Meals -->
+      <div class="meals-section" id="mealCards">
+
+        <!-- Breakfast -->
+        <div class="meal-card" onclick="toggleMeal(this)">
+          <div class="meal-card-header">
+            <span class="meal-type-badge badge-breakfast">Breakfast</span>
+            <span class="meal-kcal"><span>342</span> kcal</span>
+          </div>
+          <div class="meal-name">Greek Yogurt Bowl with Oats & Honey</div>
+          <div class="meal-source">
+            <div class="lidl-tag"><span class="lidl-tag-text">🟡 Lidl promo</span></div>
+            <div class="price-tag">€<span>1.10</span></div>
+          </div>
+          <div class="meal-macros-row">
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--lime)">28g</div><div class="macro-block-label">Protein</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--blue)">44g</div><div class="macro-block-label">Carbs</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--orange)">6g</div><div class="macro-block-label">Fat</div></div>
+            <div class="macro-block"><div class="macro-block-val">342</div><div class="macro-block-label">kcal</div></div>
+          </div>
+          <div class="meal-detail">
+            <div class="meal-ingredients">
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Greek yogurt 0% (200g)</div>
+                <div class="ingredient-price">€0.45</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Rolled oats (60g)</div>
+                <div class="ingredient-price">€0.18</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Honey (1 tbsp)</div>
+                <div class="ingredient-price">€0.22</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Banana (1 medium)</div>
+                <div class="ingredient-price">€0.25</div>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event, 'Breakfast logged ✓')">
+              ✓ Log this meal
+            </button>
+          </div>
+        </div>
+
+        <!-- Lunch -->
+        <div class="meal-card" onclick="toggleMeal(this)">
+          <div class="meal-card-header">
+            <span class="meal-type-badge badge-lunch">Lunch</span>
+            <span class="meal-kcal"><span>612</span> kcal</span>
+          </div>
+          <div class="meal-name">High-Protein Chicken Rice Bowl</div>
+          <div class="meal-source">
+            <div class="lidl-tag"><span class="lidl-tag-text">🟡 Lidl promo</span></div>
+            <div class="price-tag">€<span>1.80</span></div>
+          </div>
+          <div class="meal-macros-row">
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--lime)">52g</div><div class="macro-block-label">Protein</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--blue)">68g</div><div class="macro-block-label">Carbs</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--orange)">14g</div><div class="macro-block-label">Fat</div></div>
+            <div class="macro-block"><div class="macro-block-val">612</div><div class="macro-block-label">kcal</div></div>
+          </div>
+          <div class="meal-detail">
+            <div class="meal-ingredients">
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Chicken breast (180g) — promo</div>
+                <div class="ingredient-price">€0.98</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Basmati rice (100g dry)</div>
+                <div class="ingredient-price">€0.22</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Broccoli (150g)</div>
+                <div class="ingredient-price">€0.35</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Soy sauce, olive oil</div>
+                <div class="ingredient-price">€0.25</div>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event, 'Lunch logged ✓')">
+              ✓ Log this meal
+            </button>
+          </div>
+        </div>
+
+        <!-- Snack -->
+        <div class="meal-card" onclick="toggleMeal(this)">
+          <div class="meal-card-header">
+            <span class="meal-type-badge badge-snack">Snack</span>
+            <span class="meal-kcal"><span>210</span> kcal</span>
+          </div>
+          <div class="meal-name">Cottage Cheese + Almonds</div>
+          <div class="meal-source">
+            <div class="lidl-tag"><span class="lidl-tag-text">🟡 Lidl promo</span></div>
+            <div class="price-tag">€<span>0.65</span></div>
+          </div>
+          <div class="meal-macros-row">
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--lime)">22g</div><div class="macro-block-label">Protein</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--blue)">8g</div><div class="macro-block-label">Carbs</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--orange)">11g</div><div class="macro-block-label">Fat</div></div>
+            <div class="macro-block"><div class="macro-block-val">210</div><div class="macro-block-label">kcal</div></div>
+          </div>
+          <div class="meal-detail">
+            <div class="meal-ingredients">
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Cottage cheese (150g)</div>
+                <div class="ingredient-price">€0.42</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Almonds (20g)</div>
+                <div class="ingredient-price">€0.23</div>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event, 'Snack logged ✓')">
+              ✓ Log this meal
+            </button>
+          </div>
+        </div>
+
+        <!-- Dinner -->
+        <div class="meal-card" onclick="toggleMeal(this)">
+          <div class="meal-card-header">
+            <span class="meal-type-badge badge-dinner">Dinner</span>
+            <span class="meal-kcal"><span>680</span> kcal</span>
+          </div>
+          <div class="meal-name">Baked Salmon fillet + Sweet Potato Mash</div>
+          <div class="meal-source">
+            <div class="lidl-tag"><span class="lidl-tag-text">🟡 Lidl promo</span></div>
+            <div class="price-tag">€<span>2.10</span></div>
+          </div>
+          <div class="meal-macros-row">
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--lime)">46g</div><div class="macro-block-label">Protein</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--blue)">52g</div><div class="macro-block-label">Carbs</div></div>
+            <div class="macro-block"><div class="macro-block-val" style="color:var(--orange)">22g</div><div class="macro-block-label">Fat</div></div>
+            <div class="macro-block"><div class="macro-block-val">680</div><div class="macro-block-label">kcal</div></div>
+          </div>
+          <div class="meal-detail">
+            <div class="meal-ingredients">
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Salmon fillet (150g) — promo</div>
+                <div class="ingredient-price">€1.40</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Sweet potato (200g)</div>
+                <div class="ingredient-price">€0.30</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Green beans (100g)</div>
+                <div class="ingredient-price">€0.25</div>
+              </div>
+              <div class="ingredient-row">
+                <div class="ingredient-name"><div class="ingredient-lidl-dot"></div>Olive oil, garlic, lemon</div>
+                <div class="ingredient-price">€0.15</div>
+              </div>
+            </div>
+            <button class="log-btn" onclick="logMeal(event, 'Dinner logged ✓')">
+              ✓ Log this meal
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /meals-section -->
+    </div><!-- /plan screen -->
+
+    <!-- RECIPES SCREEN -->
+    <div class="screen" id="s1-recipes">
+      <div class="sl-header">
+        <div class="plan-week-label">TikTok Recipes</div>
+        <div class="sl-title">Recipe Library</div>
+        <div class="sl-sub">Paste a TikTok link to extract macros with AI</div>
+      </div>
+
+      <div style="margin: 0 24px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 10px; cursor:pointer;" onclick="showToast1('📱 TikTok link paste — coming soon in build!')">
+        <span style="font-size:20px">📱</span>
+        <div style="flex:1">
+          <div style="font-size:13px; color:var(--text2); font-weight:500;">Paste TikTok URL</div>
+          <div style="font-size:11px; color:var(--text3);">AI extracts recipe + macros in seconds</div>
+        </div>
+        <span style="color:var(--lime); font-size:20px;">+</span>
+      </div>
+
+      <div style="padding: 0 24px 8px; font-family:'DM Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:0.12em; text-transform:uppercase;">Saved Recipes</div>
+
+      <div style="margin: 0 24px 10px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px 16px; cursor:pointer;" onclick="showToast1('Viewing Spicy Tuna recipe…')">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10px; background:rgba(255,71,87,0.12); color:#ff4757; padding:3px 8px; border-radius:6px; font-family:'DM Mono',monospace; letter-spacing:0.1em; text-transform:uppercase;">TikTok</span>
+          <span style="font-size:11px; color:var(--text3); font-family:'DM Mono',monospace;">~87% confidence</span>
+        </div>
+        <div style="font-family:'Clash Display',sans-serif; font-size:16px; color:var(--text); margin-bottom:6px;">Spicy Tuna Rice Bowl</div>
+        <div style="display:flex; gap:14px;">
+          <span style="font-size:12px; color:var(--lime);">38g P</span>
+          <span style="font-size:12px; color:var(--blue);">52g C</span>
+          <span style="font-size:12px; color:var(--orange);">14g F</span>
+          <span style="font-size:12px; color:var(--text3); margin-left:auto;">490 kcal</span>
+        </div>
+      </div>
+
+      <div style="margin: 0 24px 10px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px 16px; cursor:pointer;" onclick="showToast1('Viewing Overnight Oats recipe…')">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10px; background:rgba(255,107,53,0.12); color:var(--orange); padding:3px 8px; border-radius:6px; font-family:'DM Mono',monospace; letter-spacing:0.1em; text-transform:uppercase;">TikTok</span>
+          <span style="font-size:11px; color:var(--text3); font-family:'DM Mono',monospace;">~92% confidence</span>
+        </div>
+        <div style="font-family:'Clash Display',sans-serif; font-size:16px; color:var(--text); margin-bottom:6px;">Viral Overnight Oats</div>
+        <div style="display:flex; gap:14px;">
+          <span style="font-size:12px; color:var(--lime);">24g P</span>
+          <span style="font-size:12px; color:var(--blue);">68g C</span>
+          <span style="font-size:12px; color:var(--orange);">8g F</span>
+          <span style="font-size:12px; color:var(--text3); margin-left:auto;">440 kcal</span>
+        </div>
+      </div>
+
+      <div style="margin:16px 24px; text-align:center;">
+        <div style="font-size:12px; color:var(--text3);">Free plan: 3/3 extracts used this month</div>
+        <button style="margin-top:10px; background:var(--lime); border:none; border-radius:12px; padding:12px 28px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; color:#0f0f0f; cursor:pointer;" onclick="showToast1('🔒 Upgrade to Pro — unlimited extracts!')">Upgrade to Pro for unlimited</button>
+      </div>
+    </div>
+
+    <!-- SHOPPING LIST SCREEN -->
+    <div class="screen" id="s1-shop">
+      <div class="sl-header">
+        <div class="plan-week-label">Week of May 5–11</div>
+        <div class="sl-title">Shopping List</div>
+        <div class="sl-sub">Based on your 3-day Lidl plan</div>
+      </div>
+
+      <div class="sl-promo-banner">
+        <span style="font-size:20px">🟡</span>
+        <div class="sl-promo-text">7 items on Lidl promo this week — <span>save up to €3.40</span></div>
+      </div>
+
+      <div class="sl-section-label">🥩 Proteins</div>
+      <div class="sl-items">
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Chicken breast (500g)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€2.49</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Salmon fillets (2×150g)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€3.99</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Greek Yogurt 0% (500g)</div>
+          <div class="sl-item-qty">×2</div>
+          <div class="sl-item-price">€1.98</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-other"></div>
+          <div class="sl-item-name">Cottage cheese (250g)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€1.29</div>
+        </div>
+      </div>
+
+      <div class="sl-section-label">🌾 Carbs & Grains</div>
+      <div class="sl-items">
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Basmati rice (1kg)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€1.49</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Rolled oats (500g)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€0.89</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-other"></div>
+          <div class="sl-item-name">Sweet potatoes (1kg)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€1.29</div>
+        </div>
+      </div>
+
+      <div class="sl-section-label">🥦 Vegetables</div>
+      <div class="sl-items">
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-lidl"></div>
+          <div class="sl-item-name">Broccoli (400g)</div>
+          <div class="sl-item-qty">×2</div>
+          <div class="sl-item-price">€1.58</div>
+        </div>
+        <div class="sl-item" onclick="toggleCheck(this)">
+          <div class="sl-check"><span class="sl-check-tick">✓</span></div>
+          <div class="sl-item-other"></div>
+          <div class="sl-item-name">Green beans (300g)</div>
+          <div class="sl-item-qty">×1</div>
+          <div class="sl-item-price">€0.99</div>
+        </div>
+      </div>
+
+      <div class="sl-total-row">
+        <div class="sl-total-label">Estimated total</div>
+        <div class="sl-total-amount">€15.99</div>
+      </div>
+
+      <div style="margin: -80px 24px 100px; display:flex; gap:8px;">
+        <button onclick="showToast1('Shopping list exported!')" style="flex:1; background:var(--surface2); border:1px solid var(--border2); border-radius:12px; padding:12px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; color:var(--text2); cursor:pointer;">Share list</button>
+        <button onclick="showToast1('🔒 Pro feature — upgrade to sort by aisle!')" style="flex:1; background:var(--lime); border:none; border-radius:12px; padding:12px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; color:#0f0f0f; cursor:pointer;">Sort by aisle ⚡</button>
+      </div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <div class="tab-item" onclick="switchTab1('today')" id="t1-today">
+        <div class="tab-icon">🏠</div>
+        <div class="tab-label">Today</div>
+      </div>
+      <div class="tab-item active" onclick="switchTab1('plan')" id="t1-plan">
+        <div class="tab-icon">🛒</div>
+        <div class="tab-label">Plan</div>
+      </div>
+      <div class="tab-item" onclick="switchTab1('recipes')" id="t1-recipes">
+        <div class="tab-icon">📱</div>
+        <div class="tab-label">Recipes</div>
+      </div>
+      <div class="tab-item" onclick="switchTab1('shop')" id="t1-shop">
+        <div class="tab-icon">📋</div>
+        <div class="tab-label">List</div>
+      </div>
+      <div class="tab-item" onclick="showToast1('Progress tab — coming in v2!')">
+        <div class="tab-icon">📊</div>
+        <div class="tab-label">Progress</div>
+      </div>
+    </div>
+
+  </div><!-- /phone1 -->
+</div><!-- /phone1 wrap -->
+
+<!-- ════════════════════════════════════════
+  PHONE 2 — PAYWALL / ONBOARDING
+════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Key Flows</div>
+  <div class="phone" id="phone2">
+
+    <div class="toast" id="toast2"></div>
+
+    <!-- ONBOARDING -->
+    <div class="screen active" id="s2-onboard">
+      <div style="padding: 70px 28px 0; flex:1; display:flex; flex-direction:column;">
+        <div style="font-family:'DM Mono',monospace; font-size:10px; color:var(--lime); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:12px;">Step 2 of 4</div>
+
+        <div style="display:flex; gap:6px; margin-bottom:28px;">
+          <div style="height:3px; flex:1; background:var(--lime); border-radius:2px;"></div>
+          <div style="height:3px; flex:1; background:var(--lime); border-radius:2px;"></div>
+          <div style="height:3px; flex:1; background:var(--surface2); border-radius:2px;"></div>
+          <div style="height:3px; flex:1; background:var(--surface2); border-radius:2px;"></div>
+        </div>
+
+        <div style="font-family:'Clash Display',sans-serif; font-size:26px; font-weight:700; color:var(--text); margin-bottom:8px; line-height:1.15;">What are your<br>daily targets?</div>
+        <div style="font-size:13px; color:var(--text3); margin-bottom:32px;">We'll build your Lidl meal plan around these.</div>
+
+        <!-- Calorie slider -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <span style="font-size:13px; color:var(--text2); font-weight:500;">Daily Calories</span>
+            <span style="font-family:'Clash Display',sans-serif; font-size:18px; color:var(--lime);" id="calVal">2,000 kcal</span>
+          </div>
+          <input type="range" min="1200" max="3500" value="2000" style="width:100%; accent-color:var(--lime); background:transparent;"
+            oninput="document.getElementById('calVal').textContent = Number(this.value).toLocaleString() + ' kcal'">
+          <div style="display:flex; justify-content:space-between; margin-top:4px;">
+            <span style="font-size:10px; color:var(--text3);">1,200</span>
+            <span style="font-size:10px; color:var(--text3);">3,500</span>
+          </div>
+        </div>
+
+        <!-- Goal pills -->
+        <div style="margin-bottom:24px;">
+          <div style="font-size:13px; color:var(--text2); font-weight:500; margin-bottom:10px;">Goal</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;" id="goalPills">
+            <div class="goal-pill active-pill" onclick="selectGoal(this)" style="padding:10px 16px; border-radius:12px; border:1px solid var(--lime); background:var(--lime-dim); cursor:pointer;">
+              <div style="font-size:13px; color:var(--lime); font-weight:600;">🏋️ Build muscle</div>
+            </div>
+            <div class="goal-pill" onclick="selectGoal(this)" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--surface); cursor:pointer;">
+              <div style="font-size:13px; color:var(--text2); font-weight:600;">🔥 Lose fat</div>
+            </div>
+            <div class="goal-pill" onclick="selectGoal(this)" style="padding:10px 16px; border-radius:12px; border:1px solid var(--border); background:var(--surface); cursor:pointer;">
+              <div style="font-size:13px; color:var(--text2); font-weight:600;">⚖️ Maintain</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly budget -->
+        <div style="margin-bottom:32px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <span style="font-size:13px; color:var(--text2); font-weight:500;">Weekly Lidl Budget</span>
+            <span style="font-family:'Clash Display',sans-serif; font-size:18px; color:var(--orange);" id="budgetVal">€35</span>
+          </div>
+          <input type="range" min="15" max="80" value="35" style="width:100%; accent-color:var(--orange);"
+            oninput="document.getElementById('budgetVal').textContent = '€' + this.value">
+          <div style="display:flex; justify-content:space-between; margin-top:4px;">
+            <span style="font-size:10px; color:var(--text3);">€15</span>
+            <span style="font-size:10px; color:var(--text3);">€80</span>
+          </div>
+        </div>
+
+        <button onclick="switchTab2('paywall')" style="background:var(--lime); border:none; border-radius:14px; padding:16px; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:700; color:#0f0f0f; cursor:pointer; width:100%;">
+          Generate My Plan →
+        </button>
+        <div style="text-align:center; margin-top:12px; font-size:12px; color:var(--text3);">
+          Free plan includes 3 days. Upgrade for full week.
+        </div>
+      </div>
+    </div>
+
+    <!-- PAYWALL -->
+    <div class="screen" id="s2-paywall">
+      <div style="padding: 60px 24px 0; flex:1; display:flex; flex-direction:column; align-items:center;">
+
+        <div style="font-family:'DM Mono',monospace; font-size:10px; color:var(--lime); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:20px;">🔒 Pro unlocks everything</div>
+
+        <div style="font-family:'Clash Display',sans-serif; font-size:30px; font-weight:700; color:var(--text); text-align:center; margin-bottom:6px; line-height:1.15;">Get your full<br>7-day plan</div>
+        <div style="font-size:13px; color:var(--text3); text-align:center; margin-bottom:28px;">Days 4–7 are waiting. Plus unlimited TikTok extracts.</div>
+
+        <!-- Feature list -->
+        <div style="width:100%; display:flex; flex-direction:column; gap:10px; margin-bottom:28px;">
+          <div style="display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px;">
+            <span style="color:var(--lime); font-size:18px;">✓</span>
+            <div>
+              <div style="font-size:13px; color:var(--text); font-weight:500;">Full 7-day Lidl meal plan</div>
+              <div style="font-size:11px; color:var(--text3);">Rebuilt every Monday with latest promos</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px;">
+            <span style="color:var(--lime); font-size:18px;">✓</span>
+            <div>
+              <div style="font-size:13px; color:var(--text); font-weight:500;">Unlimited TikTok recipe extracts</div>
+              <div style="font-size:11px; color:var(--text3);">Scan any recipe, get macros instantly</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px;">
+            <span style="color:var(--lime); font-size:18px;">✓</span>
+            <div>
+              <div style="font-size:13px; color:var(--text); font-weight:500;">Full macro tracking (P/C/F)</div>
+              <div style="font-size:11px; color:var(--text3);">Not just calories — every macro</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px;">
+            <span style="color:var(--lime); font-size:18px;">✓</span>
+            <div>
+              <div style="font-size:13px; color:var(--text); font-weight:500;">Budget analytics</div>
+              <div style="font-size:11px; color:var(--text3);">See exactly how much you save vs eating out</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pricing cards -->
+        <div style="display:flex; gap:10px; width:100%; margin-bottom:20px;">
+          <div id="monthly-card" onclick="selectPlan('monthly')" style="flex:1; border:1px solid var(--border); border-radius:14px; padding:14px 12px; background:var(--surface); cursor:pointer; transition:all 0.18s;">
+            <div style="font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">Monthly</div>
+            <div style="font-family:'Clash Display',sans-serif; font-size:22px; color:var(--text);">€4.99</div>
+            <div style="font-size:11px; color:var(--text3);">per month</div>
+          </div>
+          <div id="annual-card" onclick="selectPlan('annual')" style="flex:1; border:2px solid var(--lime); border-radius:14px; padding:14px 12px; background:var(--lime-dim); cursor:pointer; position:relative; transition:all 0.18s;">
+            <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); background:var(--lime); color:#0f0f0f; font-size:9px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; font-family:'DM Sans',sans-serif;">BEST VALUE</div>
+            <div style="font-size:10px; color:var(--lime); font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">Annual</div>
+            <div style="font-family:'Clash Display',sans-serif; font-size:22px; color:var(--lime);">€39.99</div>
+            <div style="font-size:11px; color:var(--lime); opacity:0.7;">€3.33/mo · save 33%</div>
+          </div>
+        </div>
+
+        <button onclick="showToast2('🎉 Welcome to Pro! Plan generating…')" style="width:100%; background:var(--lime); border:none; border-radius:14px; padding:16px; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:700; color:#0f0f0f; cursor:pointer; margin-bottom:10px;">
+          Start 7-day free trial
+        </button>
+        <div style="font-size:11px; color:var(--text3); text-align:center; margin-bottom:8px;">Cancel anytime. No charge during trial.</div>
+        <button onclick="switchTab2('onboard')" style="background:none; border:none; font-size:12px; color:var(--text3); cursor:pointer; padding:8px;">← Back to free plan</button>
+
+      </div>
+    </div>
+
+    <!-- EMPTY TAB BAR FOR PHONE 2 -->
+    <div class="tab-bar" style="justify-content:center; gap:20px;">
+      <div class="tab-item active" onclick="switchTab2('onboard')" id="t2-onboard">
+        <div class="tab-icon">⚙️</div>
+        <div class="tab-label">Onboarding</div>
+      </div>
+      <div class="tab-item" onclick="switchTab2('paywall')" id="t2-paywall">
+        <div class="tab-icon">⚡</div>
+        <div class="tab-label">Paywall</div>
+      </div>
+    </div>
+
+  </div><!-- /phone2 -->
+</div><!-- /phone2 wrap -->
+
+<script>
+// ── PHONE 1 TABS ──
+function switchTab1(name) {
+  document.querySelectorAll('#phone1 .screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#phone1 .tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('s1-' + name).classList.add('active');
+  document.getElementById('t1-' + name).classList.add('active');
+}
+
+// ── PHONE 2 TABS ──
+function switchTab2(name) {
+  document.querySelectorAll('#phone2 .screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#phone2 .tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('s2-' + name).classList.add('active');
+  document.getElementById('t2-' + name).classList.add('active');
+}
+
+// ── MEAL EXPAND ──
+function toggleMeal(card) {
+  const isExpanded = card.classList.contains('expanded');
+  document.querySelectorAll('.meal-card').forEach(c => c.classList.remove('expanded'));
+  if (!isExpanded) card.classList.add('expanded');
+}
+
+// ── LOG MEAL ──
+function logMeal(e, msg) {
+  e.stopPropagation();
+  showToast1(msg);
+}
+
+// ── DAY CHIPS ──
+const dayData = {
+  'Mon': { kcal: '1,990', cost: '€4.20', bar: '74%' },
+  'Tue': { kcal: '2,010', cost: '€4.50', bar: '76%' },
+  'Wed': { kcal: '1,950', cost: '€3.90', bar: '72%' },
+};
+
+function selectDay(el, day) {
+  document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  if (dayData[day]) {
+    document.getElementById('dayKcal').textContent = dayData[day].kcal;
+    document.getElementById('dayCost').textContent = dayData[day].cost;
+    document.getElementById('dayBar').style.width = dayData[day].bar;
+  }
+}
+
+// ── REGEN ──
+function regenPlan() {
+  const icon = document.getElementById('regenIcon');
+  icon.classList.add('spinning');
+  showToast1('Regenerating plan…');
+  setTimeout(() => icon.classList.remove('spinning'), 700);
+}
+
+// ── SHOPPING LIST ──
+function toggleCheck(item) {
+  item.classList.toggle('checked');
+}
+
+// ── PAYWALL PLAN SELECT ──
+function selectPlan(plan) {
+  const m = document.getElementById('monthly-card');
+  const a = document.getElementById('annual-card');
+  if (plan === 'monthly') {
+    m.style.borderColor = 'var(--lime)';
+    m.style.background = 'var(--lime-dim)';
+    a.style.borderWidth = '1px';
+    a.style.borderColor = 'var(--border)';
+    a.style.background = 'var(--surface)';
+  } else {
+    a.style.borderWidth = '2px';
+    a.style.borderColor = 'var(--lime)';
+    a.style.background = 'var(--lime-dim)';
+    m.style.borderColor = 'var(--border)';
+    m.style.background = 'var(--surface)';
+  }
+}
+
+// ── GOAL PILLS ──
+function selectGoal(el) {
+  document.querySelectorAll('.goal-pill').forEach(p => {
+    p.style.borderColor = 'var(--border)';
+    p.style.background = 'var(--surface)';
+    p.querySelector('div').style.color = 'var(--text2)';
+  });
+  el.style.borderColor = 'var(--lime)';
+  el.style.background = 'var(--lime-dim)';
+  el.querySelector('div').style.color = 'var(--lime)';
+}
+
+// ── PAYWALL from locked days ──
+function showPaywall() {
+  switchTab1('plan');
+  setTimeout(() => {
+    showToast1('🔒 Upgrade to Pro for the full week!');
+  }, 100);
+}
+
+// ── TOASTS ──
+function showToast1(msg) {
+  const t = document.getElementById('toast1');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function showToast2(msg) {
+  const t = document.getElementById('toast2');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
