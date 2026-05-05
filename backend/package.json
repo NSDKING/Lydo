@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn src/server.ts"
+    "dev": "ts-node-dev --respawn src/server.ts",
+    "postinstall": "npx playwright install chromium --with-deps"
+
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
