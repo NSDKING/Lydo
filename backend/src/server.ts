@@ -41,5 +41,7 @@ app.post('/tiktok/analyze', async (req, res) => {
 });
 
 app.listen(port, () => {
+  console.log(`Mako backend listening on port ${port}`);
   console.log(`Mako backend listening on http://localhost:${port}`);
+  console.log(`Mako backend listening on http://${host}:${port}`);
 });
