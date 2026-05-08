@@ -1,24 +1,28 @@
 FROM mcr.microsoft.com/playwright:v1.44.0-jammy
 
-# 1. Set the working directory to /app
 WORKDIR /app
 
-# 2. Copy the entire repository content
+# 1. Copy everything
 COPY . .
 
-# 3. Move INTO the backend folder where package.json lives
+# 2. Move to backend
 WORKDIR /app/backend
 
-# 4. Install dependencies (this will trigger your playwright postinstall too)
+# 3. FIX: Update Node.js to the latest v20 to satisfy dependency requirements
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+# 4. Install dependencies 
+# This will also run 'npx playwright install chromium --with-deps' 
+# because of your postinstall script.
 RUN npm ci
 
-# 5. Run the build (tsc) inside /app/backend
+# 5. Build TypeScript
 RUN npx tsc
 
-# 6. Prune dev dependencies to keep the image slim
+# 6. Clean up
 RUN npm prune --omit=dev
 
 EXPOSE 3000
 
-# 7. Start the server from the current directory (which is /app/backend)
 CMD ["node", "dist/server.js"]
