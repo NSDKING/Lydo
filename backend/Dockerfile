@@ -1,16 +1,24 @@
 FROM mcr.microsoft.com/playwright:v1.44.0-jammy
 
+# 1. Set the working directory to /app
 WORKDIR /app
 
-# Copy EVERYTHING from the Railway root into the Docker image
-# Since Railway is rooted at /backend, this copies everything INSIDE /backend
+# 2. Copy the entire repository content
 COPY . .
 
-# Install dependencies
+# 3. Move INTO the backend folder where package.json lives
+WORKDIR /app/backend
+
+# 4. Install dependencies (this will trigger your playwright postinstall too)
 RUN npm ci
 
-# Run the build
-RUN npx tsc && npm prune --omit=dev
+# 5. Run the build (tsc) inside /app/backend
+RUN npx tsc
+
+# 6. Prune dev dependencies to keep the image slim
+RUN npm prune --omit=dev
 
 EXPOSE 3000
+
+# 7. Start the server from the current directory (which is /app/backend)
 CMD ["node", "dist/server.js"]
