@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import Anthropic from '@anthropic-ai/sdk';
 import { chromium } from 'playwright';
-import { saveLidlPromos } from './supabaseClient';
+import { saveLidlPromos } from './supabaseClient.js';
 
 dotenv.config();
 

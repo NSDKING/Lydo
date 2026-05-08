@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
 import { chromium } from 'playwright';
-import { saveRecipeAnalysis } from './supabaseClient';
+import { saveRecipeAnalysis } from './supabaseClient.js';
 
 dotenv.config();
 
@@ -22,8 +22,8 @@ export async function processTiktokRecipe(request: TiktokAnalysisRequest) {
   await page.goto(request.tiktokUrl, { waitUntil: 'networkidle' });
 
   const screenshotBuffer = await page.screenshot({ fullPage: true });
-  const description = await page.$eval('meta[name="description"]', (el) => (el as HTMLMetaElement).content).catch(() => '');
-
+  // Explicitly typing 'el' as Element to satisfy strict mode
+  const description = await page.$eval('meta[name="description"]', (el: Element) => (el as HTMLMetaElement).content).catch(() => '');
   const analysisPrompt = `You are a nutrition-savvy recipe analyst. The TikTok recipe URL is ${request.tiktokUrl}. The page description is: "${description}". Provide:
 1. The recipe title
 2. Ingredients list

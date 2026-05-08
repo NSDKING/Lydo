@@ -1,15 +1,15 @@
-import express, { Request, Response } from 'express'; // 1. Added Request and Response imports
-import { handler as menuHandler } from './generateMenu';
-import { handler as tiktokHandler } from './processTiktok';
-import { handler as lidlHandler } from './scrapeLidlPromo';
-import { saveUserData } from './supabaseClient';
+import express, { Request, Response } from 'express'; 
+// Added .js extensions to satisfy NodeNext resolution
+import { handler as menuHandler } from './generateMenu.js';
+import { handler as tiktokHandler } from './processTiktok.js';
+import { handler as lidlHandler } from './scrapeLidlPromo.js';
+import { saveUserData } from './supabaseClient.js';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-// 2. Explicitly typed (_req: Request, res: Response)
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', service: 'mako-backend' });
 });
@@ -43,6 +43,5 @@ app.post('/tiktok/analyze', async (req: Request, res: Response) => {
 
 app.listen(port, () => {
   console.log(`Mako backend listening on port ${port}`);
-  // Removed the undefined 'host' variable to prevent a crash
   console.log(`Mako backend listening on http://localhost:${port}`);
 });
