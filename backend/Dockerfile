@@ -2,15 +2,14 @@ FROM mcr.microsoft.com/playwright:v1.44.0-jammy
 
 WORKDIR /app
 
-# We are already inside the 'backend' folder thanks to Railway's Root Dir setting
-COPY package*.json ./
+# Copy EVERYTHING from the Railway root into the Docker image
+# Since Railway is rooted at /backend, this copies everything INSIDE /backend
+COPY . .
+
+# Install dependencies
 RUN npm ci
 
-# Copy files relative to the current folder
-COPY tsconfig.json ./
-COPY src ./src
-
-# This runs the compiler and cleans up
+# Run the build
 RUN npx tsc && npm prune --omit=dev
 
 EXPOSE 3000
