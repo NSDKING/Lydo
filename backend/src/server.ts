@@ -1,17 +1,32 @@
 import express, { Request, Response } from 'express'; 
-// Added .js extensions to satisfy NodeNext resolution
+// Ensure your tsconfig.json is set to 'NodeNext' or 'Node16' for these imports
 import { handler as menuHandler } from './generateMenu.js';
 import { handler as tiktokHandler } from './processTiktok.js';
 import { handler as lidlHandler } from './scrapeLidlPromo.js';
 import { saveUserData } from './supabaseClient.js';
 
 const app = express();
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+/**
+ * PORT SETUP
+ * Railway provides the PORT environment variable. 
+ * Binding to 0.0.0.0 is critical for containerized environments.
+ */
+const port = Number(process.env.PORT) || 3000;
+const host = '0.0.0.0'; 
 
 app.use(express.json({ limit: '10mb' }));
 
+/**
+ * HEALTHCHECK ENDPOINT
+ * This must respond with a 200 OK within the timeout window (default 30s).
+ */
 app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok', service: 'mako-backend' });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    service: 'mako-backend' 
+  });
 });
 
 app.post('/user-data', async (req: Request, res: Response) => {
@@ -24,24 +39,33 @@ app.post('/user-data', async (req: Request, res: Response) => {
     await saveUserData(userId, profile);
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('User data save failed', error);
+    console.error('User data save failed:', error);
     res.status(500).json({ error: (error as Error).message });
   }
 });
 
-app.get('/lidl/promos', async (_req: Request, res: Response) => {
-  return lidlHandler(_req, res);
+// Scraper/Heavy Task Routes
+app.get('/lidl/promos', lidlHandler);
+app.post('/menu/generate', menuHandler);
+app.post('/tiktok/analyze', tiktokHandler);
+
+/**
+ * SERVER INIT
+ * Explicitly binding to host '0.0.0.0' ensures the Railway healthchecker 
+ * can reach the service via IPv4.
+ */
+const server = app.listen(port, host, () => {
+  console.log('--------------------------------------------------');
+  console.log(`🚀 Mako backend is live!`);
+  console.log(`📡 Listening on: http://${host}:${port}`);
+  console.log(`🏥 Healthcheck: http://${host}:${port}/health`);
+  console.log('--------------------------------------------------');
 });
 
-app.post('/menu/generate', async (req: Request, res: Response) => {
-  return menuHandler(req, res);
-});
-
-app.post('/tiktok/analyze', async (req: Request, res: Response) => {
-  return tiktokHandler(req, res);
-});
-
-app.listen(port, () => {
-  console.log(`Mako backend listening on port ${port}`);
-  console.log(`Mako backend listening on http://localhost:${port}`);
+// Handle graceful shutdown for the container
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+  });
 });
