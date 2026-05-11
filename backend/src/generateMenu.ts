@@ -159,7 +159,7 @@ export async function generateMenu(request: MenuRequest): Promise<{ plan: MenuPl
     plan = JSON.parse(match[0]) as MenuPlan;
   }
 
-  let saved = null;
+  let saved: any = null;
   if (request.userId) {
     try {
       const record = {
@@ -189,10 +189,7 @@ export async function generateMenu(request: MenuRequest): Promise<{ plan: MenuPl
 
 export async function handler(req: any, res: any) {
   try {
-    const body = req.body as MenuRequest;
-    if (!body.userId) return res.status(400).json({ error: 'Missing userId' });
-
-    const result = await generateMenu(body);
+    const result = await generateMenu(req.body as MenuRequest);
     return res.status(200).json(result);
   } catch (error) {
     console.error('Menu generation failed:', error);
