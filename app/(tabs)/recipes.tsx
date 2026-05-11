@@ -1,7 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { analyzeTiktok, TiktokRecipe } from '@/services/api';
+import { AdaptedIngredient, adaptRecipeWithLidl, analyzeTiktok, TiktokRecipe } from '@/services/api';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,13 +14,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
+interface RecipeState {
+  addDay: string | null;
+  addSlot: number;
+  added: boolean;
+  adapting: boolean;
+  adaptedIngredients: AdaptedIngredient[] | null;
+  adaptError: string | null;
+}
+
+function defaultRecipeState(): RecipeState {
+  return { addDay: null, addSlot: 0, added: false, adapting: false, adaptedIngredients: null, adaptError: null };
+}
 
 export default function RecipesScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { plan, isLoading: planLoading } = useMenu();
+  const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
 
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [tiktokUrl, setTiktokUrl] = useState('');
@@ -28,8 +41,19 @@ export default function RecipesScreen() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importedRecipes, setImportedRecipes] = useState<TiktokRecipe[]>([]);
   const [expandedRecipe, setExpandedRecipe] = useState<number | null>(null);
+  const [recipeStates, setRecipeStates] = useState<RecipeState[]>([]);
 
+  const planDays = plan?.days.map(d => d.day) ?? [];
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
+  const mealAccentColors = [colors.orange, colors.lime, colors.blue, '#c47fff'];
+
+  const updateRecipeState = (idx: number, patch: Partial<RecipeState>) => {
+    setRecipeStates(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  };
 
   const handleImport = async () => {
     const url = tiktokUrl.trim();
@@ -39,6 +63,7 @@ export default function RecipesScreen() {
     try {
       const recipe = await analyzeTiktok(url);
       setImportedRecipes(prev => [recipe, ...prev]);
+      setRecipeStates(prev => [defaultRecipeState(), ...prev]);
       setTiktokUrl('');
       setExpandedRecipe(0);
     } catch (err) {
@@ -48,7 +73,23 @@ export default function RecipesScreen() {
     }
   };
 
-  const mealAccentColors = [colors.orange, colors.lime, colors.blue, '#c47fff'];
+  const handleAddToDay = (recipeIdx: number) => {
+    const state = recipeStates[recipeIdx];
+    if (!state?.addDay) return;
+    addTiktokMeal(state.addDay, state.addSlot, importedRecipes[recipeIdx]);
+    updateRecipeState(recipeIdx, { added: true });
+  };
+
+  const handleAdapt = async (recipeIdx: number) => {
+    const recipe = importedRecipes[recipeIdx];
+    updateRecipeState(recipeIdx, { adapting: true, adaptError: null, adaptedIngredients: null });
+    try {
+      const result = await adaptRecipeWithLidl(recipe.title, recipe.ingredients);
+      updateRecipeState(recipeIdx, { adapting: false, adaptedIngredients: result.adaptedIngredients });
+    } catch (err) {
+      updateRecipeState(recipeIdx, { adapting: false, adaptError: (err as Error).message });
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -100,24 +141,26 @@ export default function RecipesScreen() {
             <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Imported</Text>
             {importedRecipes.map((recipe, idx) => {
               const open = expandedRecipe === idx;
+              const state = recipeStates[idx] ?? defaultRecipeState();
+
               return (
-                <TouchableOpacity
+                <View
                   key={idx}
                   style={[styles.recipeCard, { backgroundColor: colors.surface, borderColor: open ? colors.lime : colors.border }]}
-                  onPress={() => setExpandedRecipe(open ? null : idx)}
-                  activeOpacity={0.85}
                 >
-                  <View style={styles.recipeCardHeader}>
-                    <View style={styles.recipeCardLeft}>
-                      <Text style={[styles.recipeName, { color: colors.text }]}>{recipe.title}</Text>
-                      <View style={styles.recipeMeta}>
-                        <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>⏱ {recipe.prep_time}</Text>
-                        <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>  {recipe.difficulty}</Text>
-                        <Text style={[styles.recipeMetaText, { color: colors.lime }]}>{recipe.macros.calories} kcal</Text>
+                  <TouchableOpacity onPress={() => setExpandedRecipe(open ? null : idx)} activeOpacity={0.85}>
+                    <View style={styles.recipeCardHeader}>
+                      <View style={styles.recipeCardLeft}>
+                        <Text style={[styles.recipeName, { color: colors.text }]}>{recipe.title}</Text>
+                        <View style={styles.recipeMeta}>
+                          <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>⏱ {recipe.prep_time}</Text>
+                          <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>  {recipe.difficulty}</Text>
+                          <Text style={[styles.recipeMetaText, { color: colors.lime }]}>{recipe.macros.calories} kcal</Text>
+                        </View>
                       </View>
+                      <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
                     </View>
-                    <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
-                  </View>
+                  </TouchableOpacity>
 
                   {open && (
                     <>
@@ -158,9 +201,101 @@ export default function RecipesScreen() {
                           ))}
                         </>
                       )}
+
+                      {/* ── Add to Plan ─────────────────────────────────── */}
+                      <View style={[styles.addToPlanBox, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>ADD TO PLAN</Text>
+
+                        {/* Day chips */}
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayChipsScroll}>
+                          <View style={styles.dayChips}>
+                            {planDays.map(day => {
+                              const sel = state.addDay === day;
+                              return (
+                                <TouchableOpacity
+                                  key={day}
+                                  style={[styles.dayChip, { backgroundColor: sel ? colors.lime : colors.surface3, borderColor: sel ? colors.lime : colors.border2 }]}
+                                  onPress={() => updateRecipeState(idx, { addDay: day, added: false })}
+                                >
+                                  <Text style={[styles.dayChipText, { color: sel ? colors.background : colors.text3 }]}>
+                                    {day.slice(0, 3)}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </ScrollView>
+
+                        {/* Slot selector */}
+                        <View style={styles.slotRow}>
+                          {MEAL_SLOTS.map((slot, slotIdx) => {
+                            const sel = state.addSlot === slotIdx;
+                            return (
+                              <TouchableOpacity
+                                key={slot}
+                                style={[styles.slotChip, { backgroundColor: sel ? colors.blue + '33' : colors.surface3, borderColor: sel ? colors.blue : colors.border2 }]}
+                                onPress={() => updateRecipeState(idx, { addSlot: slotIdx, added: false })}
+                              >
+                                <Text style={[styles.slotChipText, { color: sel ? colors.blue : colors.text3 }]}>{slot}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        {/* Add button */}
+                        <TouchableOpacity
+                          style={[styles.addBtn, { backgroundColor: state.added ? colors.surface3 : state.addDay ? colors.lime : colors.surface3, opacity: state.addDay ? 1 : 0.4 }]}
+                          onPress={() => handleAddToDay(idx)}
+                          disabled={!state.addDay || state.added}
+                        >
+                          <Text style={[styles.addBtnText, { color: state.added ? colors.lime : colors.background }]}>
+                            {state.added ? `✓ Added to ${state.addDay}` : state.addDay ? `Add to ${state.addDay}` : 'Select a day'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* ── Adapt with Lidl ─────────────────────────────── */}
+                      <View style={styles.adaptSection}>
+                        <TouchableOpacity
+                          style={[styles.adaptBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
+                          onPress={() => handleAdapt(idx)}
+                          disabled={state.adapting}
+                        >
+                          {state.adapting
+                            ? <ActivityIndicator color={colors.lime} size="small" style={{ marginRight: 8 }} />
+                            : <Text style={styles.adaptBtnIcon}>🛒</Text>
+                          }
+                          <Text style={[styles.adaptBtnText, { color: state.adapting ? colors.text3 : colors.lime }]}>
+                            {state.adapting ? 'Finding Lidl matches…' : 'Adapt with Lidl'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {state.adaptError && (
+                          <Text style={[styles.importError, { color: colors.orange, marginTop: 6 }]}>{state.adaptError}</Text>
+                        )}
+
+                        {state.adaptedIngredients && (
+                          <View style={[styles.adaptResults, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
+                            <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>LIDL SUBSTITUTIONS</Text>
+                            {state.adaptedIngredients.map((item, i) => (
+                              <View key={i} style={styles.adaptRow}>
+                                <View style={styles.adaptRowLeft}>
+                                  <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
+                                  {item.lidlProduct
+                                    ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
+                                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                                  }
+                                  {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
+                                </View>
+                                <View style={[styles.adaptDot, { backgroundColor: item.lidlProduct ? colors.lime : colors.surface2 }]} />
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
                     </>
                   )}
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -182,7 +317,7 @@ export default function RecipesScreen() {
           {!planLoading && todayPlan?.meals.map((meal, idx) => {
             const open = expandedMeal === idx;
             const accent = mealAccentColors[idx % mealAccentColors.length];
-            const mealType = MEAL_TYPES[idx] ?? 'Meal';
+            const mealType = MEAL_SLOTS[idx] ?? 'Meal';
             const hasLidl = meal.lidl_products_used.length > 0;
 
             return (
@@ -192,7 +327,6 @@ export default function RecipesScreen() {
                 onPress={() => setExpandedMeal(open ? null : idx)}
                 activeOpacity={0.85}
               >
-                {/* Card header */}
                 <View style={styles.mealRecipeHeader}>
                   <View style={[styles.mealTypePill, { backgroundColor: `${accent}22` }]}>
                     <Text style={[styles.mealTypePillText, { color: accent }]}>{mealType}</Text>
@@ -214,7 +348,6 @@ export default function RecipesScreen() {
 
                 {open && (
                   <>
-                    {/* Macros */}
                     <View style={styles.macroPills}>
                       {[
                         { label: 'P', val: `${meal.protein_g}g`, color: colors.lime },
@@ -228,7 +361,6 @@ export default function RecipesScreen() {
                       ))}
                     </View>
 
-                    {/* Lidl products */}
                     {hasLidl && (
                       <>
                         <Text style={[styles.subheading, { color: colors.text3 }]}>FROM LIDL</Text>
@@ -241,7 +373,6 @@ export default function RecipesScreen() {
                       </>
                     )}
 
-                    {/* All ingredients */}
                     <Text style={[styles.subheading, { color: colors.text3, marginTop: hasLidl ? 14 : 0 }]}>
                       INGREDIENTS
                     </Text>
@@ -300,6 +431,30 @@ const styles = StyleSheet.create({
   stepNum: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   stepNumText: { fontSize: 11, fontWeight: '700' },
   stepText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  // Add to plan
+  addToPlanBox: { marginTop: 18, borderWidth: 1, borderRadius: 14, padding: 14 },
+  dayChipsScroll: { marginBottom: 10 },
+  dayChips: { flexDirection: 'row', gap: 8 },
+  dayChip: { borderWidth: 1, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 12 },
+  dayChipText: { fontSize: 12, fontWeight: '600' },
+  slotRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  slotChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 7, alignItems: 'center' },
+  slotChipText: { fontSize: 12, fontWeight: '600' },
+  addBtn: { borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  addBtnText: { fontSize: 14, fontWeight: '700' },
+  // Adapt with Lidl
+  adaptSection: { marginTop: 14 },
+  adaptBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, gap: 8 },
+  adaptBtnIcon: { fontSize: 16 },
+  adaptBtnText: { fontSize: 14, fontWeight: '600' },
+  adaptResults: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 14 },
+  adaptRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 10 },
+  adaptRowLeft: { flex: 1 },
+  adaptOriginal: { fontSize: 12, marginBottom: 2 },
+  adaptProduct: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  adaptNote: { fontSize: 11, fontStyle: 'italic' },
+  adaptDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, flexShrink: 0 },
+  // Plan meals
   mealRecipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 10 },
   mealRecipeHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   mealTypePill: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 8, flexShrink: 0 },

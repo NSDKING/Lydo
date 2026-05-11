@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   ViewStyle,
@@ -14,54 +15,56 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const DAYS = [
-  { key: 'Monday',    name: 'Mon' },
-  { key: 'Tuesday',   name: 'Tue' },
-  { key: 'Wednesday', name: 'Wed' },
-  { key: 'Thursday',  name: 'Thu' },
-  { key: 'Friday',    name: 'Fri' },
-  { key: 'Saturday',  name: 'Sat' },
-  { key: 'Sunday',    name: 'Sun' },
+  { key: 'Monday',    short: 'Mon' },
+  { key: 'Tuesday',   short: 'Tue' },
+  { key: 'Wednesday', short: 'Wed' },
+  { key: 'Thursday',  short: 'Thu' },
+  { key: 'Friday',    short: 'Fri' },
+  { key: 'Saturday',  short: 'Sat' },
+  { key: 'Sunday',    short: 'Sun' },
 ];
 
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
 export default function PlanScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { plan, isLoading, error, refresh } = useMenu();
+  const {
+    isLoading, error, refresh,
+    loggedMeals, logMeal,
+    lockedMeals, lockMeal,
+    editMealName, swapMeal, swappingMeal,
+    getEffectiveDayPlan,
+  } = useMenu();
 
   const [selectedDay, setSelectedDay] = useState(TODAY);
-  const [selectedMealIndex, setSelectedMealIndex] = useState<number | null>(null);
+  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
 
-  const selectedDayPlan = plan?.days.find(d => d.day === selectedDay) ?? plan?.days[0] ?? null;
+  const dayPlan = getEffectiveDayPlan(selectedDay);
+  const logged = loggedMeals[selectedDay] ?? new Set<number>();
+  const locked = lockedMeals[selectedDay] ?? new Set<number>();
 
-  const getMealTypeColor = (index: number) => {
-    switch (index % 4) {
-      case 0: return colors.orange;
-      case 1: return colors.lime;
-      case 2: return colors.blue;
-      default: return '#c47fff';
-    }
-  };
-
-  const getMealTypeBg = (index: number) => {
-    switch (index % 4) {
-      case 0: return colors.orangeDim;
-      case 1: return colors.limeDim;
-      case 2: return colors.blueDim;
-      default: return 'rgba(180,100,255,0.12)';
-    }
-  };
-
-  const barPercent = selectedDayPlan
-    ? Math.min(100, Math.round((selectedDayPlan.total_calories / 2000) * 100))
+  const barPercent = dayPlan
+    ? Math.min(100, Math.round((dayPlan.total_calories / 2000) * 100))
     : 0;
+
+  const getMealAccent = (idx: number) =>
+    [colors.orange, colors.lime, colors.blue, '#c47fff'][idx % 4];
+  const getMealAccentDim = (idx: number) =>
+    [`${colors.orange}22`, `${colors.lime}22`, `${colors.blue}22`, 'rgba(196,127,255,0.13)'][idx % 4];
+
+  const commitEdit = (idx: number) => {
+    if (editDraft.trim()) editMealName(selectedDay, idx, editDraft.trim());
+    setEditingIdx(null);
+    setEditDraft('');
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Header */}
         <View style={styles.header}>
@@ -83,87 +86,67 @@ export default function PlanScreen() {
           </View>
         </View>
 
-        {/* Budget Strip */}
+        {/* Budget strip */}
         <View style={[styles.budgetStrip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.budgetLeft}>
+          <View>
             <Text style={[styles.budgetSublabel, { color: colors.text3 }]}>Daily Budget</Text>
             <Text style={[styles.budgetAmount, { color: colors.lime }]}>
-              {selectedDayPlan ? `${selectedDayPlan.total_calories.toLocaleString()} kcal` : '— kcal'}
+              {dayPlan ? `${dayPlan.total_calories.toLocaleString()} kcal` : '— kcal'}
             </Text>
           </View>
           <View style={styles.budgetMacros}>
-            <View style={styles.macroPill}>
-              <Text style={[styles.macroVal, { color: colors.lime }]}>
-                {selectedDayPlan ? `${selectedDayPlan.protein_g}g` : '—'}
-              </Text>
-              <Text style={[styles.macroKey, { color: colors.text3 }]}>PRO</Text>
-            </View>
-            <View style={styles.macroPill}>
-              <Text style={[styles.macroVal, { color: colors.blue }]}>
-                {selectedDayPlan ? `${selectedDayPlan.carbs_g}g` : '—'}
-              </Text>
-              <Text style={[styles.macroKey, { color: colors.text3 }]}>CARB</Text>
-            </View>
-            <View style={styles.macroPill}>
-              <Text style={[styles.macroVal, { color: colors.orange }]}>
-                {selectedDayPlan ? `${selectedDayPlan.fat_g}g` : '—'}
-              </Text>
-              <Text style={[styles.macroKey, { color: colors.text3 }]}>FAT</Text>
-            </View>
+            {dayPlan && [
+              { val: `${dayPlan.protein_g}g`, label: 'PRO', color: colors.lime },
+              { val: `${dayPlan.carbs_g}g`, label: 'CARB', color: colors.blue },
+              { val: `${dayPlan.fat_g}g`, label: 'FAT', color: colors.orange },
+            ].map(m => (
+              <View key={m.label} style={styles.macroPill}>
+                <Text style={[styles.macroVal, { color: m.color }]}>{m.val}</Text>
+                <Text style={[styles.macroKey, { color: colors.text3 }]}>{m.label}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        {/* Day Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dayScroll}
-          contentContainerStyle={styles.dayScrollContent}
-        >
-          {DAYS.map((day) => {
-            const isActive = selectedDay === day.key;
+        {/* Day tabs */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={styles.dayScroll} contentContainerStyle={styles.dayScrollContent}>
+          {DAYS.map(day => {
+            const active = selectedDay === day.key;
             return (
               <TouchableOpacity
                 key={day.key}
                 style={[
                   styles.dayChip,
                   { backgroundColor: colors.surface, borderColor: colors.border },
-                  isActive && { borderColor: colors.lime, backgroundColor: colors.limeDim },
+                  active && { borderColor: colors.lime, backgroundColor: colors.limeDim },
                 ]}
-                onPress={() => { setSelectedDay(day.key); setSelectedMealIndex(null); }}
+                onPress={() => { setSelectedDay(day.key); setExpandedMeal(null); setEditingIdx(null); }}
               >
-                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{day.name}</Text>
-                <Text style={[styles.dayChipName, { color: isActive ? colors.lime : colors.text2 }]}>
-                  {day.key}
-                </Text>
+                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{day.short}</Text>
+                <Text style={[styles.dayChipName, { color: active ? colors.lime : colors.text2 }]}>{day.key.slice(0, 3)}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
 
-        {/* Day Summary */}
+        {/* Day summary bar */}
         <View style={[styles.daySummary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.daySummaryLeft}>
+          <View>
             <Text style={[styles.dsLabel, { color: colors.text3 }]}>Day Total</Text>
             <Text style={[styles.dsVal, { color: colors.text }]}>
               <Text style={{ color: colors.lime }}>
-                {selectedDayPlan ? selectedDayPlan.total_calories.toLocaleString() : '—'}
-              </Text>
-              {' kcal'}
+                {dayPlan ? dayPlan.total_calories.toLocaleString() : '—'}
+              </Text>{' kcal'}
             </Text>
           </View>
           <View style={styles.dsBarWrap}>
             <View style={styles.dsBarLabel}>
-              <Text style={[styles.dsBarText, { color: colors.text3 }]}>Progress</Text>
+              <Text style={[styles.dsBarText, { color: colors.text3 }]}>Goal</Text>
               <Text style={[styles.dsBarText, { color: colors.text3 }]}>{barPercent}%</Text>
             </View>
             <View style={[styles.dsBarTrack, { backgroundColor: colors.surface3 }]}>
-              <View
-                style={[
-                  styles.dsBarFill,
-                  { backgroundColor: colors.lime, width: `${barPercent}%` } as ViewStyle,
-                ]}
-              />
+              <View style={[styles.dsBarFill, { backgroundColor: colors.lime, width: `${barPercent}%` } as ViewStyle]} />
             </View>
           </View>
         </View>
@@ -177,47 +160,63 @@ export default function PlanScreen() {
             </View>
           )}
 
-          {error && (
-            <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>
-          )}
+          {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
 
-          {!isLoading && selectedDayPlan?.meals.map((meal, index) => {
-            const isSelected = selectedMealIndex === index;
-            const mealType = MEAL_TYPES[index] ?? 'Meal';
+          {!isLoading && dayPlan?.meals.map((meal, idx) => {
+            const expanded = expandedMeal === idx;
+            const isLogged = logged.has(idx);
+            const isLocked = locked.has(idx);
+            const isSwapping = swappingMeal?.day === selectedDay && swappingMeal?.idx === idx;
+            const isEditing = editingIdx === idx;
+            const accent = getMealAccent(idx);
+            const accentDim = getMealAccentDim(idx);
+            const mealType = MEAL_TYPES[idx] ?? 'Meal';
             const isLidl = meal.lidl_products_used.length > 0;
 
             return (
               <TouchableOpacity
-                key={index}
+                key={idx}
+                activeOpacity={0.88}
                 style={[
                   styles.mealCard,
                   {
-                    backgroundColor: isSelected ? colors.surface2 : colors.surface,
-                    borderColor: isSelected ? colors.lime : colors.border,
-                    shadowColor: isSelected ? colors.lime : '#000',
-                    shadowOffset: { width: 0, height: 8 },
-                    shadowOpacity: isSelected ? 0.18 : 0.05,
-                    shadowRadius: isSelected ? 18 : 6,
-                    elevation: isSelected ? 8 : 1,
+                    backgroundColor: expanded ? colors.surface2 : colors.surface,
+                    borderColor: expanded ? accent : colors.border,
+                    opacity: isSwapping ? 0.5 : 1,
                   },
                 ]}
-                onPress={() => setSelectedMealIndex(isSelected ? null : index)}
+                onPress={() => { setExpandedMeal(expanded ? null : idx); setEditingIdx(null); }}
               >
+                {/* Card header */}
                 <View style={styles.mealCardHeader}>
-                  <Text style={[
-                    styles.mealTypeBadge,
-                    { backgroundColor: getMealTypeBg(index), color: getMealTypeColor(index) },
-                  ]}>
-                    {mealType}
-                  </Text>
+                  <View style={[styles.mealTypePill, { backgroundColor: accentDim }]}>
+                    <Text style={[styles.mealTypePillText, { color: accent }]}>{mealType}</Text>
+                  </View>
                   <Text style={[styles.mealKcal, { color: colors.text3 }]}>
                     <Text style={{ color: colors.text2 }}>{meal.calories}</Text> kcal
                   </Text>
+                  {isLocked && <Text style={styles.lockIcon}>🔒</Text>}
+                  {isSwapping && <ActivityIndicator size="small" color={accent} />}
                 </View>
 
-                <Text style={[styles.mealName, { color: colors.text }]}>{meal.name}</Text>
+                {/* Meal name — editable */}
+                {isEditing ? (
+                  <TextInput
+                    style={[styles.mealNameInput, { color: colors.text, borderColor: accent }]}
+                    value={editDraft}
+                    onChangeText={setEditDraft}
+                    onBlur={() => commitEdit(idx)}
+                    onSubmitEditing={() => commitEdit(idx)}
+                    autoFocus
+                  />
+                ) : (
+                  <Text style={[styles.mealName, { color: isLogged ? colors.text2 : colors.text }]}>
+                    {meal.name}
+                  </Text>
+                )}
 
-                <View style={styles.mealSource}>
+                {/* Source badges */}
+                <View style={styles.mealMeta}>
                   {isLidl && (
                     <View style={[styles.lidlTag, { backgroundColor: colors.limeDim2, borderColor: 'rgba(181,242,61,0.2)' }]}>
                       <Text style={[styles.lidlTagText, { color: colors.lime }]}>Lidl</Text>
@@ -225,6 +224,7 @@ export default function PlanScreen() {
                   )}
                 </View>
 
+                {/* Macro row */}
                 <View style={[styles.mealMacrosRow, { borderTopColor: colors.border }]}>
                   {[
                     { val: `${meal.protein_g}g`, label: 'Protein', color: colors.lime },
@@ -232,42 +232,69 @@ export default function PlanScreen() {
                     { val: `${meal.fat_g}g`, label: 'Fat', color: colors.orange },
                     { val: `${meal.calories}`, label: 'kcal', color: colors.text },
                   ].map((m, i, arr) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.macroBlock,
-                        { borderColor: colors.border },
-                        i === arr.length - 1 && styles.macroBlockLast,
-                      ]}
-                    >
+                    <View key={i} style={[styles.macroBlock, { borderColor: colors.border }, i === arr.length - 1 && styles.macroBlockLast]}>
                       <Text style={[styles.macroBlockVal, { color: m.color }]}>{m.val}</Text>
                       <Text style={[styles.macroBlockLabel, { color: colors.text3 }]}>{m.label}</Text>
                     </View>
                   ))}
                 </View>
 
-                {isSelected && (
-                  <View style={styles.selectedActions}>
-                    {[
-                      { icon: '🔒', label: 'Lock', color: colors.lime },
-                      { icon: '✏️', label: 'Edit', color: colors.orange },
-                      { icon: '🔁', label: 'Swap', color: colors.blue },
-                      { icon: '✅', label: 'Log', color: colors.lime },
-                    ].map((action) => (
-                      <TouchableOpacity
-                        key={action.label}
-                        style={[styles.actionButton, { borderColor: colors.border }]}
-                      >
-                        <Text style={[styles.actionIcon, { color: action.color }]}>{action.icon}</Text>
-                        <Text style={[styles.actionText, { color: colors.text3 }]}>{action.label}</Text>
-                      </TouchableOpacity>
-                    ))}
+                {/* Action buttons — visible when expanded */}
+                {expanded && (
+                  <View style={styles.actionRow}>
+                    {/* Lock */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { borderColor: isLocked ? colors.lime : colors.border, backgroundColor: isLocked ? colors.limeDim : 'transparent' }]}
+                      onPress={(e) => { e.stopPropagation?.(); lockMeal(selectedDay, idx); }}
+                    >
+                      <Text style={styles.actionBtnIcon}>{isLocked ? '🔒' : '🔓'}</Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLocked ? colors.lime : colors.text3 }]}>
+                        {isLocked ? 'Locked' : 'Lock'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Edit */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { borderColor: colors.border }]}
+                      onPress={(e) => { e.stopPropagation?.(); setEditDraft(meal.name); setEditingIdx(idx); }}
+                    >
+                      <Text style={styles.actionBtnIcon}>✏️</Text>
+                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Edit</Text>
+                    </TouchableOpacity>
+
+                    {/* Swap */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { borderColor: colors.border, opacity: isLocked ? 0.4 : 1 }]}
+                      onPress={(e) => { e.stopPropagation?.(); if (!isLocked) swapMeal(selectedDay, idx); }}
+                      disabled={isLocked || isSwapping}
+                    >
+                      {isSwapping
+                        ? <ActivityIndicator size="small" color={colors.blue} />
+                        : <Text style={styles.actionBtnIcon}>🔁</Text>
+                      }
+                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Swap</Text>
+                    </TouchableOpacity>
+
+                    {/* Log */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { borderColor: isLogged ? colors.lime : colors.border, backgroundColor: isLogged ? colors.limeDim : 'transparent' }]}
+                      onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
+                    >
+                      <Text style={styles.actionBtnIcon}>{isLogged ? '✅' : '☑️'}</Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLogged ? colors.lime : colors.text3 }]}>
+                        {isLogged ? 'Logged' : 'Log'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
-                <TouchableOpacity style={[styles.logBtn, { backgroundColor: colors.lime }]}>
-                  <Text style={[styles.logBtnText, { color: colors.background }]}>
-                    {isSelected ? '✓ Log this meal' : 'Log Meal'}
+                {/* Quick log button always visible */}
+                <TouchableOpacity
+                  style={[styles.logBtn, { backgroundColor: isLogged ? colors.surface3 : colors.lime }]}
+                  onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
+                >
+                  <Text style={[styles.logBtnText, { color: isLogged ? colors.text2 : colors.background }]}>
+                    {isLogged ? '✓ Logged' : 'Log Meal'}
                   </Text>
                 </TouchableOpacity>
               </TouchableOpacity>
@@ -286,18 +313,10 @@ const styles = StyleSheet.create({
   headerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   weekLabel: { fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 4 },
   title: { fontSize: 28, fontWeight: '700' },
-  regenBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderWidth: 1, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, marginTop: 4,
-  },
+  regenBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, marginTop: 4 },
   regenIcon: { fontSize: 14 },
   regenText: { fontSize: 12, fontWeight: '500' },
-  budgetStrip: {
-    marginHorizontal: 24, marginTop: 16, borderWidth: 1, borderRadius: 16,
-    paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'space-between',
-  },
-  budgetLeft: { flexDirection: 'column' },
+  budgetStrip: { marginHorizontal: 24, marginTop: 16, borderWidth: 1, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   budgetSublabel: { fontSize: 10, letterSpacing: 0.1, textTransform: 'uppercase', marginBottom: 2 },
   budgetAmount: { fontSize: 22, fontWeight: '600' },
   budgetMacros: { flexDirection: 'row', gap: 12 },
@@ -306,58 +325,41 @@ const styles = StyleSheet.create({
   macroKey: { fontSize: 9, letterSpacing: 0.08, textTransform: 'uppercase' },
   dayScroll: { marginTop: 16, paddingHorizontal: 24 },
   dayScrollContent: { gap: 8, paddingRight: 24 },
-  dayChip: {
-    alignItems: 'center', gap: 2, paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 12, borderWidth: 1, minWidth: 80,
-  },
+  dayChip: { alignItems: 'center', gap: 2, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, minWidth: 60 },
   dayChipLabel: { fontSize: 10, letterSpacing: 0.08, textTransform: 'uppercase' },
-  dayChipName: { fontSize: 14, fontWeight: '600' },
-  daySummary: {
-    marginHorizontal: 24, marginTop: 14, borderWidth: 1, borderRadius: 16,
-    paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'space-between',
-  },
-  daySummaryLeft: { alignItems: 'center' },
+  dayChipName: { fontSize: 13, fontWeight: '600' },
+  daySummary: { marginHorizontal: 24, marginTop: 14, borderWidth: 1, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 16 },
   dsLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.1 },
-  dsVal: { fontSize: 20 },
-  dsBarWrap: { flex: 1, marginHorizontal: 16 },
+  dsVal: { fontSize: 18 },
+  dsBarWrap: { flex: 1 },
   dsBarLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   dsBarText: { fontSize: 10 },
   dsBarTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   dsBarFill: { height: '100%', borderRadius: 3 },
   mealsSection: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100, gap: 12 },
-  loadingCard: {
-    borderRadius: 16, borderWidth: 1, paddingVertical: 20, paddingHorizontal: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-  },
+  loadingCard: { borderRadius: 16, borderWidth: 1, paddingVertical: 20, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 14 },
   errorText: { fontSize: 13, textAlign: 'center', marginVertical: 8 },
   mealCard: { borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
-  mealCardHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 14, paddingHorizontal: 16, paddingBottom: 10,
-  },
-  mealTypeBadge: {
-    fontSize: 9, letterSpacing: 0.12, textTransform: 'uppercase',
-    paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6, fontWeight: '500',
-  },
-  mealKcal: { fontSize: 12 },
+  mealCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 14, paddingHorizontal: 16, paddingBottom: 10 },
+  mealTypePill: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 8 },
+  mealTypePillText: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.1 },
+  mealKcal: { flex: 1, fontSize: 12, textAlign: 'right' },
+  lockIcon: { fontSize: 13 },
   mealName: { fontSize: 17, fontWeight: '600', paddingHorizontal: 16, paddingBottom: 6 },
-  mealSource: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 10 },
-  lidlTag: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
-  lidlTagText: { fontSize: 10, fontWeight: '500' },
+  mealNameInput: { fontSize: 17, fontWeight: '600', marginHorizontal: 16, marginBottom: 6, borderBottomWidth: 1.5, paddingBottom: 4 },
+  mealMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
+  lidlTag: { borderWidth: 1, borderRadius: 6, paddingVertical: 2, paddingHorizontal: 7 },
+  lidlTagText: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.1 },
   mealMacrosRow: { flexDirection: 'row', borderTopWidth: 1, marginTop: 4 },
   macroBlock: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRightWidth: 1 },
   macroBlockLast: { borderRightWidth: 0 },
   macroBlockVal: { fontSize: 13, fontWeight: '700' },
   macroBlockLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.08 },
-  selectedActions: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-    paddingHorizontal: 16, paddingTop: 12, justifyContent: 'space-between',
-  },
-  actionButton: { borderWidth: 1, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center', minWidth: 70 },
-  actionIcon: { fontSize: 18, marginBottom: 4 },
-  actionText: { fontSize: 11, fontWeight: '600' },
+  actionRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  actionBtn: { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 10, alignItems: 'center', gap: 4 },
+  actionBtnIcon: { fontSize: 16 },
+  actionBtnLabel: { fontSize: 10, fontWeight: '600' },
   logBtn: { marginVertical: 10, marginHorizontal: 16, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   logBtnText: { fontSize: 14, fontWeight: '600' },
 });
