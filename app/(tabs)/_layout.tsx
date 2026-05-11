@@ -4,12 +4,14 @@ import React from 'react';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { MenuProvider } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
+    <MenuProvider>
     <Tabs
       initialRouteName="index"
       screenOptions={{
@@ -58,5 +60,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </MenuProvider>
   );
 }

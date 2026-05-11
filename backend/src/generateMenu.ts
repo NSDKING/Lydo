@@ -159,17 +159,23 @@ export async function generateMenu(request: MenuRequest): Promise<{ plan: MenuPl
     plan = JSON.parse(match[0]) as MenuPlan;
   }
 
-  const record = {
-    user_id: request.userId,
-    preferences: request.preferences ?? null,
-    dietary_restrictions: request.dietaryRestrictions ?? null,
-    days,
-    meals_per_day: mealsPerDay,
-    plan_text: JSON.stringify(plan),
-    created_at: new Date().toISOString(),
-  };
-
-  const saved = await saveGeneratedMenu(record);
+  let saved = null;
+  if (request.userId) {
+    try {
+      const record = {
+        user_id: request.userId,
+        preferences: request.preferences ?? null,
+        dietary_restrictions: request.dietaryRestrictions ?? null,
+        days,
+        meals_per_day: mealsPerDay,
+        plan_text: JSON.stringify(plan),
+        created_at: new Date().toISOString(),
+      };
+      saved = await saveGeneratedMenu(record);
+    } catch (err) {
+      console.warn('Could not save menu to DB:', (err as Error).message);
+    }
+  }
 
   const usage = message.usage as any;
   const cacheParts: string[] = [];
