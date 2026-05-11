@@ -1,3 +1,5 @@
+import './wsPolyfill.js';
+ 
 import express, { Request, Response } from 'express';
 
 import { handler as menuHandler } from './generateMenu.js';
@@ -8,33 +10,20 @@ import { saveUserData } from './supabaseClient.js';
 
 const app = express();
 
-/**
- * CLOUD CONFIG
- */
-const PORT = process.env.PORT || '3000';
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = '0.0.0.0';
 
-/**
- * HEALTHCHECKS
- */
 app.get('/', (_req, res) => {
   res.status(200).send('Mako Backend Online');
 });
+
 
 app.get('/health', (_req, res) => {
   res.status(200).send('OK');
 });
 
-/**
- * MIDDLEWARE
- */
 app.use(express.json({ limit: '10mb' }));
 
-/**
- * ROUTES
- */
-
-// Save user profile data
 app.post('/user-data', async (req: Request, res: Response) => {
   try {
     const { userId, profile } = req.body;
@@ -50,7 +39,6 @@ app.post('/user-data', async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true
     });
-
   } catch (error) {
     console.error('User data save failed:', error);
 
@@ -60,19 +48,13 @@ app.post('/user-data', async (req: Request, res: Response) => {
   }
 });
 
-// Lidl scraping
 app.get('/lidl/promos', lidlHandler);
 
-// AI meal generation
 app.post('/menu/generate', menuHandler);
 
-// TikTok processing
 app.post('/tiktok/analyze', tiktokHandler);
 
-/**
- * SERVER START
- */
-const server = app.listen(Number(PORT), HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`
 🚀 Mako Backend Initialized
 ---------------------------------
@@ -83,11 +65,8 @@ Health:  /health
 `);
 });
 
-/**
- * GRACEFUL SHUTDOWN
- */
 process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+  console.log('SIGTERM received');
 
   server.close(() => {
     console.log('HTTP server closed');

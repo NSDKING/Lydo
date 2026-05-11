@@ -47,7 +47,7 @@ export default function TodayScreen() {
               />
               <Circle
                 cx={110}
-                cy={110}
+                cy={110}  
                 r={96}
                 stroke={colors.lime}
                 strokeWidth={14}

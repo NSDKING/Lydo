@@ -1,111 +1,248 @@
 import dotenv from 'dotenv';
-import Anthropic from '@anthropic-ai/sdk';
-import { chromium } from 'playwright';
+import { chromium, Page } from 'playwright';
 import { saveLidlPromos } from './supabaseClient.js';
 
 dotenv.config();
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Replace Unicode characters outside Latin-1 (>255) with ASCII equivalents
+function sanitize(str: string): string {
+  return str
+    .replace(/’|‘/g, "'")   // curly single quotes → straight
+    .replace(/“|”/g, '"')   // curly double quotes → straight
+    .replace(/–/g, '-')          // en dash
+    .replace(/—/g, '--')         // em dash
+    .replace(/Œ/g, 'OE')         // Œ
+    .replace(/œ/g, 'oe')         // œ
+    .replace(/[Ā-￿]/g, c => c.normalize('NFD').replace(/[̀-ͯ]/g, '') || '?')
+    .trim();
+}
 
 export interface LidlPromo {
   title: string;
   price: string;
-  validFrom?: string;
-  validTo?: string;
-  imageUrl?: string;
+  old_price?: string;
+  discount_percent?: number;
+  available: boolean | null;
+  image_url?: string;
   supermarket: 'Lidl';
-  sourceUrl: string;
+  source_url: string;
 }
 
-async function extractPromosFromScreenshot(imageBase64: string): Promise<{ title: string; price: string }[]> {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: 'image/png', data: imageBase64 },
-        },
-        {
-          type: 'text',
-          text: 'Extract all product promotions visible on this Lidl catalogue page. Return a JSON array only, no explanation: [{"title": "product name", "price": "price with currency"}]. If no products are visible return [].',
-        },
-      ],
-    }],
+async function dismissCookieBanner(page: Page) {
+  try {
+    const btn = page.locator('#onetrust-accept-btn-handler').first();
+    if (await btn.isVisible({ timeout: 3000 })) {
+      await btn.click();
+      await page.waitForTimeout(1000);
+    }
+  } catch {}
+}
+
+async function autoScroll(page: Page) {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => {
+      let total = 0;
+      const distance = 600;
+      const timer = setInterval(() => {
+        window.scrollBy(0, distance);
+        total += distance;
+        if (total >= document.body.scrollHeight) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 200);
+    });
+  });
+  await page.waitForTimeout(1500);
+}
+
+async function extractFromPage(page: Page, url: string, isFirstPage: boolean): Promise<LidlPromo[]> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`Opening ${url} (attempt ${attempt})`);
+
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+      if (isFirstPage && attempt === 1) {
+        await dismissCookieBanner(page);
+      }
+
+      // wait for product grid to render
+      await page
+        .waitForSelector('.product-grid-box', { timeout: 20000 })
+        .catch(() => {});
+
+      await autoScroll(page);
+
+      const products = await page.evaluate((sourceUrl: string) => {
+        const cards = Array.from(document.querySelectorAll('.product-grid-box'));
+
+        const results: Array<{
+          title: string;
+          price: string;
+          old_price?: string;
+          discount_percent?: number;
+          available: boolean;
+          image_url?: string;
+          source_url: string;
+        }> = [];
+
+        const seen = new Set<string>();
+
+        for (const card of cards) {
+          // --- title & price from structured JSON attribute ---
+          let impression: Record<string, any> = {};
+          try {
+            impression = JSON.parse(
+              decodeURIComponent(card.getAttribute('data-gridbox-impression') || '{}')
+            );
+          } catch {}
+
+          const title: string = impression.name || card.querySelector('.product-grid-box__title')?.textContent?.trim() || '';
+          if (!title || seen.has(title)) continue;
+          seen.add(title);
+
+          const currentPriceNum: number | undefined = typeof impression.price === 'number' ? impression.price : undefined;
+          const price = currentPriceNum !== undefined ? `${currentPriceNum.toFixed(2)} €` : '';
+          if (!price) continue;
+
+          // --- old price: look for struck-through price element ---
+          const oldPriceEl = card.querySelector(
+            '.ods-price__price--old, [class*="old-price"], [class*="OldPrice"], del, s'
+          );
+          const oldPriceText = oldPriceEl?.textContent?.trim() || undefined;
+          const oldPriceNum = oldPriceText
+            ? parseFloat(oldPriceText.replace(',', '.').replace(/[^\d.]/g, ''))
+            : undefined;
+          const old_price = oldPriceNum && !isNaN(oldPriceNum) ? `${oldPriceNum.toFixed(2)} €` : undefined;
+
+          const discount_percent =
+            old_price && currentPriceNum && oldPriceNum && oldPriceNum > currentPriceNum
+              ? Math.round(((oldPriceNum - currentPriceNum) / oldPriceNum) * 100)
+              : undefined;
+
+          // --- image: direct CDN src ---
+          const imgEl = card.querySelector('img') as HTMLImageElement | null;
+          const rawSrc =
+            imgEl?.dataset?.src ||
+            imgEl?.dataset?.lazySrc ||
+            imgEl?.getAttribute('data-original') ||
+            imgEl?.src ||
+            undefined;
+          const image_url = rawSrc && !rawSrc.startsWith('data:') ? rawSrc : undefined;
+
+          // --- availability from text ---
+          const availText = card.querySelector('.product-grid-box__availabilities')?.textContent?.trim().toLowerCase() || '';
+          const available = !(
+            availText.includes('rupture') ||
+            availText.includes('out of stock') ||
+            availText.includes('indisponible')
+          );
+
+          results.push({ title, price, old_price, discount_percent, available, image_url, source_url: sourceUrl });
+        }
+
+        return results;
+      }, url);
+
+      console.log(`FOUND PRODUCTS: ${products.length}`);
+
+      return products.map((p) => ({
+        ...p,
+        title: sanitize(p.title),
+        price: p.price.replace(' €', ''),
+        old_price: p.old_price ? p.old_price.replace(' €', '') : undefined,
+        supermarket: 'Lidl' as const,
+      }));
+    } catch (err) {
+      console.error(`EXTRACTION ERROR (attempt ${attempt}):`, err);
+      if (attempt < 3) await page.waitForTimeout(3000 * attempt);
+    }
+  }
+  return [];
+}
+
+export async function scrapeLidlPromo(catalogueUrl: string, maxPages = 5) {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
 
-  const text = response.content[0]?.type === 'text' ? response.content[0].text : '[]';
-  try {
-    const match = text.match(/\[[\s\S]*\]/);
-    return match ? JSON.parse(match[0]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function buildPageUrl(catalogueUrl: string, pageNum: number): string {
-  // Replace existing page number or append it
-  // URL pattern: .../view/flyer/page/N?...
-  const withoutPage = catalogueUrl.replace(/\/page\/\d+/, '');
-  const queryIndex = withoutPage.indexOf('?');
-  const base = queryIndex !== -1 ? withoutPage.slice(0, queryIndex) : withoutPage;
-  const query = queryIndex !== -1 ? withoutPage.slice(queryIndex) : '';
-  return `${base}/page/${pageNum}${query}`;
-}
-
-export async function scrapeLidlPromo(catalogueUrl: string, maxPages = 5): Promise<LidlPromo[]> {
-  const browser = await chromium.launch({ headless: true });
   const allPromos: LidlPromo[] = [];
 
   try {
-    const page = await browser.newPage({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      viewport: { width: 1400, height: 900 },
+      locale: 'fr-FR',
+      extraHTTPHeaders: {
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      },
     });
 
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    });
+
+    const page = await context.newPage();
+
+    await page.route('**/*', (route) => {
+      if (['font', 'media'].includes(route.request().resourceType())) return route.abort();
+      route.continue();
+    });
+
+    const baseUrl = catalogueUrl.split('?')[0];
+    let consecutiveEmpty = 0;
+
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-      const pageUrl = buildPageUrl(catalogueUrl, pageNum);
+      const offset = (pageNum - 1) * 24;
+      const pageUrl = `${baseUrl}?offset=${offset}`;
 
-      const response = await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 20000 }).catch(() => null);
-      if (!response || response.status() === 404) break;
+      console.log(`SCRAPING PAGE ${pageNum} (offset=${offset})`);
 
-      await page.waitForTimeout(1500);
+      const promos = await extractFromPage(page, pageUrl, pageNum === 1);
 
-      const screenshotBuffer = await page.screenshot({ fullPage: false });
-      const imageBase64 = screenshotBuffer.toString('base64');
-
-      const promos = await extractPromosFromScreenshot(imageBase64);
-
-      for (const promo of promos) {
-        allPromos.push({ ...promo, supermarket: 'Lidl', sourceUrl: pageUrl });
+      if (!promos.length) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= 2) {
+          console.log('Two consecutive empty pages — stopping');
+          break;
+        }
+      } else {
+        consecutiveEmpty = 0;
+        allPromos.push(...promos);
       }
 
-      console.log(`Page ${pageNum}: found ${promos.length} promos`);
+      if (pageNum < maxPages) {
+        await page.waitForTimeout(1500 + Math.floor(Math.random() * 1000));
+      }
     }
   } finally {
     await browser.close();
   }
 
-  if (allPromos.length > 0) {
-    await saveLidlPromos(allPromos);
-  }
+  const deduped = Array.from(new Map(allPromos.map((p) => [p.title, p])).values());
+  console.log(`TOTAL UNIQUE PRODUCTS: ${deduped.length}`);
 
-  return allPromos;
+  if (deduped.length > 0) await saveLidlPromos(deduped);
+
+  return deduped;
 }
 
 export async function handler(req: any, res: any) {
-  const catalogueUrl = req.query?.url as string;
-  if (!catalogueUrl) {
-    return res.status(400).json({ error: 'Missing ?url= query parameter. Pass the Lidl catalogue URL.' });
-  }
-
   try {
-    const maxPages = req.query?.pages ? parseInt(req.query.pages as string, 10) : 5;
-    const promos = await scrapeLidlPromo(catalogueUrl, maxPages);
-    res.status(200).json({ count: promos.length, promos });
-  } catch (error) {
-    console.error('Lidl scrape failed', error);
-    res.status(500).json({ error: (error as Error).message });
+    const url = req.query?.url as string;
+    if (!url) return res.status(400).json({ error: 'Missing url' });
+
+    const pages = req.query?.pages ? parseInt(req.query.pages, 10) : 1;
+    const promos = await scrapeLidlPromo(url, pages);
+
+    return res.status(200).json({ count: promos.length, promos });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: (err as Error).message });
   }
 }
