@@ -32,24 +32,31 @@ interface GenerateParams {
 }
 
 export async function generateMenuPlan(params?: GenerateParams): Promise<MenuPlan> {
-  const response = await fetch(`${API_URL}/menu/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(180_000),
-    body: JSON.stringify({
-      days: params?.days ?? 7,
-      mealsPerDay: params?.mealsPerDay ?? 3,
-      targetCalories: params?.targetCalories ?? 2000,
-      preferences: params?.preferences ?? '',
-      dietaryRestrictions: params?.dietaryRestrictions ?? '',
-    }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 180_000);
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${response.status}`);
+  try {
+    const response = await fetch(`${API_URL}/menu/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        days: params?.days ?? 7,
+        mealsPerDay: params?.mealsPerDay ?? 3,
+        targetCalories: params?.targetCalories ?? 2000,
+        preferences: params?.preferences ?? '',
+        dietaryRestrictions: params?.dietaryRestrictions ?? '',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error ?? `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    return (data as any).plan as MenuPlan;
+  } finally {
+    clearTimeout(timer);
   }
-
-  const data = await response.json();
-  return (data as any).plan as MenuPlan;
 }
