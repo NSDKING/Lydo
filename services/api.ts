@@ -31,6 +31,36 @@ interface GenerateParams {
   mealsPerDay?: number;
 }
 
+export interface TiktokRecipe {
+  title: string;
+  ingredients: string[];
+  steps: string[];
+  macros: { protein_g: number; carbs_g: number; fat_g: number; calories: number };
+  prep_time: string;
+  difficulty: string;
+}
+
+export async function analyzeTiktok(url: string): Promise<TiktokRecipe> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await fetch(`${API_URL}/tiktok/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ tiktokUrl: url }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error ?? `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    return (data as any).recipe as TiktokRecipe;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function generateMenuPlan(params?: GenerateParams): Promise<MenuPlan> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 180_000);

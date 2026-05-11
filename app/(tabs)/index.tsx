@@ -9,67 +9,62 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const MEAL_COLORS_KEYS = ['orange', 'lime', 'blue', 'orange'] as const;
 const MACRO_MAX = { protein: 160, carbs: 250, fat: 80 };
-
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-const TODAY_SHORT = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
 export default function TodayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { plan, isLoading, error } = useMenu();
+  const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros } = useMenu();
 
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
+  const todayLogged = loggedMeals[TODAY] ?? new Set<number>();
 
   const totalCalories = todayPlan?.total_calories ?? 2000;
-  const eatenCalories = 0;
+  const eatenCalories = getEatenCalories(TODAY);
+  const eatenMacros = getEatenMacros(TODAY);
   const remainingCalories = totalCalories - eatenCalories;
   const progress = totalCalories > 0 ? eatenCalories / totalCalories : 0;
+
+  const mealColorMap = [colors.orange, colors.lime, colors.blue, colors.orange];
 
   const macros = [
     {
       label: 'PROTEIN',
-      value: todayPlan ? `${todayPlan.protein_g}g` : '—',
-      width: todayPlan ? `${Math.min(100, Math.round((todayPlan.protein_g / MACRO_MAX.protein) * 100))}%` : '0%',
+      goalG: todayPlan?.protein_g ?? 0,
+      eatenG: eatenMacros.protein_g,
+      max: MACRO_MAX.protein,
       color: colors.lime,
     },
     {
       label: 'CARBS',
-      value: todayPlan ? `${todayPlan.carbs_g}g` : '—',
-      width: todayPlan ? `${Math.min(100, Math.round((todayPlan.carbs_g / MACRO_MAX.carbs) * 100))}%` : '0%',
+      goalG: todayPlan?.carbs_g ?? 0,
+      eatenG: eatenMacros.carbs_g,
+      max: MACRO_MAX.carbs,
       color: colors.blue,
     },
     {
       label: 'FAT',
-      value: todayPlan ? `${todayPlan.fat_g}g` : '—',
-      width: todayPlan ? `${Math.min(100, Math.round((todayPlan.fat_g / MACRO_MAX.fat) * 100))}%` : '0%',
+      goalG: todayPlan?.fat_g ?? 0,
+      eatenG: eatenMacros.fat_g,
+      max: MACRO_MAX.fat,
       color: colors.orange,
     },
   ];
-
-  const mealColors = [colors.orange, colors.lime, colors.blue, colors.orange];
-
-  const meals = todayPlan?.meals.map((m, i) => ({
-    name: m.name,
-    calories: m.calories,
-    color: mealColors[i % mealColors.length],
-    status: 'log',
-  })) ?? [];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.greeting, { color: colors.text3 }]}>Good morning 👊</Text>
-          <Text style={[styles.dayTitle, { color: colors.text }]}>{TODAY_SHORT}</Text>
+          <Text style={[styles.dayTitle, { color: colors.text }]}>{TODAY}</Text>
         </View>
 
+        {/* Calorie ring */}
         <View style={styles.ringSection}>
           <View style={styles.ringWrapper}>
             <Svg width={220} height={220} style={styles.ring}>
@@ -99,23 +94,35 @@ export default function TodayScreen() {
           </View>
         </View>
 
+        {/* Macro bars — goal (dim) + progress (vibrant) */}
         <View style={styles.macrosSection}>
-          {macros.map((macro, index) => {
-            const fillStyle = { width: macro.width, backgroundColor: macro.color } as ViewStyle;
+          {macros.map((macro) => {
+            const goalPct = Math.min(100, Math.round((macro.goalG / macro.max) * 100));
+            const progressPct = Math.min(100, Math.round((macro.eatenG / macro.max) * 100));
             return (
-              <View key={index} style={styles.macroRow}>
+              <View key={macro.label} style={styles.macroRow}>
                 <View style={styles.macroRowTop}>
                   <Text style={[styles.macroLabel, { color: colors.text3 }]}>{macro.label}</Text>
-                  <Text style={[styles.macroValue, { color: colors.text }]}>{macro.value}</Text>
+                  <Text style={[styles.macroValue, { color: colors.text }]}>
+                    {macro.eatenG > 0
+                      ? `${macro.eatenG}g / ${macro.goalG}g`
+                      : macro.goalG > 0 ? `${macro.goalG}g goal` : '—'}
+                  </Text>
                 </View>
                 <View style={[styles.macroTrack, { backgroundColor: colors.surface3 }]}>
-                  <View style={[styles.macroFill, fillStyle]} />
+                  {/* goal bar — dim */}
+                  <View style={[styles.macroBar, { width: `${goalPct}%`, backgroundColor: macro.color, opacity: 0.2 }]} />
+                  {/* progress bar — vibrant */}
+                  {progressPct > 0 && (
+                    <View style={[styles.macroBar, styles.macroBarAbsolute, { width: `${progressPct}%`, backgroundColor: macro.color }]} />
+                  )}
                 </View>
               </View>
             );
           })}
         </View>
 
+        {/* Today's meals */}
         <View style={styles.planSection}>
           <Text style={[styles.planTitle, { color: colors.text3 }]}>Today&apos;s Plan</Text>
 
@@ -130,8 +137,9 @@ export default function TodayScreen() {
             </View>
           )}
 
-          {!isLoading && meals.map((meal, index) => {
-            const isLogged = false;
+          {!isLoading && todayPlan?.meals.map((meal, index) => {
+            const isLogged = todayLogged.has(index);
+            const dotColor = mealColorMap[index % mealColorMap.length];
             return (
               <View
                 key={index}
@@ -145,11 +153,14 @@ export default function TodayScreen() {
                 ]}
               >
                 <View style={styles.mealRowTop}>
-                  <View style={[styles.mealDot, { backgroundColor: meal.color }]} />
-                  <Text style={[styles.mealText, { color: colors.text }]}>{meal.name}</Text>
+                  <View style={[styles.mealDot, { backgroundColor: dotColor }]} />
+                  <Text style={[styles.mealText, { color: isLogged ? colors.text2 : colors.text }]}>
+                    {meal.name}
+                  </Text>
                   <Text style={[styles.mealKcal, { color: colors.text3 }]}>{meal.calories} kcal</Text>
                   <TouchableOpacity
                     style={[styles.mealButton, { backgroundColor: isLogged ? colors.surface3 : colors.lime }]}
+                    onPress={() => logMeal(TODAY, index)}
                   >
                     <Text style={[styles.mealButtonText, { color: isLogged ? colors.text2 : colors.background }]}>
                       {isLogged ? '✓ Logged' : 'Log'}
@@ -183,19 +194,15 @@ const styles = StyleSheet.create({
   macroRowTop: { flexDirection: 'row', justifyContent: 'space-between' },
   macroLabel: { fontSize: 10, letterSpacing: 0.18, textTransform: 'uppercase' },
   macroValue: { fontSize: 12, fontWeight: '700' },
-  macroTrack: { height: 5, borderRadius: 3, overflow: 'hidden' },
-  macroFill: { height: '100%', borderRadius: 3 },
+  macroTrack: { height: 6, borderRadius: 3, overflow: 'hidden', position: 'relative' },
+  macroBar: { position: 'absolute', top: 0, left: 0, height: '100%', borderRadius: 3 },
+  macroBarAbsolute: { opacity: 1 },
   planSection: { paddingHorizontal: 24, paddingBottom: 100, marginTop: 18, gap: 12 },
   planTitle: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 8 },
   errorText: { fontSize: 13, textAlign: 'center', marginVertical: 8 },
   loadingCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderRadius: 18, borderWidth: 1, paddingVertical: 20, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   loadingText: { fontSize: 14 },
   mealCard: { borderRadius: 18, paddingVertical: 16, paddingHorizontal: 16 },
