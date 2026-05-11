@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(node -e \"const pkg = require\\('d:/code/caloriecounter/new/mako/backend/node_modules/@anthropic-ai/sdk/package.json'\\); console.log\\(pkg.version\\)\")",
+      "Bash(node -e \"const pkg = JSON.parse\\(require\\('fs'\\).readFileSync\\('d:/code/caloriecounter/new/mako/backend/package.json','utf8'\\)\\); console.log\\(pkg.dependencies['@anthropic-ai/sdk']\\)\")"
+    ]
+  }
+}
