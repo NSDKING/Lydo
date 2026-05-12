@@ -1,4 +1,5 @@
 import { API_URL } from '@/constants/config';
+import { supabase } from '@/lib/supabase';
 
 export interface Meal {
   name: string;
@@ -134,12 +135,13 @@ export async function analyzeTiktok(url: string): Promise<TiktokRecipe> {
 }
 
 export async function fetchLidlCatalog(): Promise<LidlPromoDetail[]> {
-  try {
-    const data = await get<{ products: LidlPromoDetail[] }>('/lidl/catalog', 10_000);
-    return data.products ?? [];
-  } catch {
-    return [];
-  }
+  const { data } = await supabase
+    .from('lidl_promos')
+    .select('title, price, old_price, discount_percent, image_url')
+    .eq('available', true)
+    .order('discount_percent', { ascending: false, nullsFirst: false })
+    .limit(300);
+  return (data as LidlPromoDetail[] | null) ?? [];
 }
 
 export async function adaptRecipeWithLidl(
