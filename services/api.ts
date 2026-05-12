@@ -122,8 +122,8 @@ export async function generateMenuPlan(params?: {
   return data.plan;
 }
 
-export async function swapMeal(dayPlan: DayPlan, mealIndex: number): Promise<Meal> {
-  const data = await post<{ meal: Meal }>('/menu/swap', { dayPlan, mealIndex }, 60_000);
+export async function swapMeal(dayPlan: DayPlan, mealIndex: number, preferences?: string): Promise<Meal> {
+  const data = await post<{ meal: Meal }>('/menu/swap', { dayPlan, mealIndex, preferences }, 60_000);
   return data.meal;
 }
 

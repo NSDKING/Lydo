@@ -1,9 +1,11 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Meal, analyzeTiktok, swapMeal as apiSwapMeal } from '@/services/api';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +29,17 @@ const DAYS = [
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
+type SwapPhase = 'choose' | 'ai' | 'tiktok' | 'loading' | 'preview';
+interface SwapState {
+  day: string;
+  idx: number;
+  phase: SwapPhase;
+  preferences: string;
+  tiktokUrl: string;
+  candidate: Meal | null;
+  error: string | null;
+}
+
 export default function PlanScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
@@ -34,14 +47,18 @@ export default function PlanScreen() {
     isLoading, error, refresh,
     loggedMeals, logMeal,
     lockedMeals, lockMeal,
-    editMealName, swapMeal, swappingMeal,
+    editMealName,
+    swappingMeal,
     getEffectiveDayPlan,
+    applyMealOverride,
+    persistCurrentPlan,
   } = useMenu();
 
   const [selectedDay, setSelectedDay] = useState(TODAY);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [swapState, setSwapState] = useState<SwapState | null>(null);
 
   const dayPlan = getEffectiveDayPlan(selectedDay);
   const logged = loggedMeals[selectedDay] ?? new Set<number>();
@@ -60,6 +77,50 @@ export default function PlanScreen() {
     if (editDraft.trim()) editMealName(selectedDay, idx, editDraft.trim());
     setEditingIdx(null);
     setEditDraft('');
+  };
+
+  const openSwapModal = (day: string, idx: number) => {
+    setSwapState({ day, idx, phase: 'choose', preferences: '', tiktokUrl: '', candidate: null, error: null });
+  };
+
+  const runAISwap = async () => {
+    if (!swapState) return;
+    const dp = getEffectiveDayPlan(swapState.day);
+    if (!dp) return;
+    setSwapState(s => s ? { ...s, phase: 'loading', error: null } : null);
+    try {
+      const meal = await apiSwapMeal(dp, swapState.idx, swapState.preferences || undefined);
+      setSwapState(s => s ? { ...s, phase: 'preview', candidate: meal } : null);
+    } catch (e) {
+      setSwapState(s => s ? { ...s, phase: 'ai', error: (e as Error).message } : null);
+    }
+  };
+
+  const runTikTokSwap = async () => {
+    if (!swapState) return;
+    setSwapState(s => s ? { ...s, phase: 'loading', error: null } : null);
+    try {
+      const recipe = await analyzeTiktok(swapState.tiktokUrl.trim());
+      const meal: Meal = {
+        name: recipe.title,
+        calories: recipe.macros.calories,
+        protein_g: recipe.macros.protein_g,
+        carbs_g: recipe.macros.carbs_g,
+        fat_g: recipe.macros.fat_g,
+        ingredients: recipe.ingredients,
+        lidl_products_used: [],
+      };
+      setSwapState(s => s ? { ...s, phase: 'preview', candidate: meal } : null);
+    } catch (e) {
+      setSwapState(s => s ? { ...s, phase: 'tiktok', error: (e as Error).message } : null);
+    }
+  };
+
+  const confirmSwap = async () => {
+    if (!swapState?.candidate) return;
+    applyMealOverride(swapState.day, swapState.idx, swapState.candidate);
+    setSwapState(null);
+    persistCurrentPlan().catch(console.warn);
   };
 
   return (
@@ -199,7 +260,7 @@ export default function PlanScreen() {
                   {isSwapping && <ActivityIndicator size="small" color={accent} />}
                 </View>
 
-                {/* Meal name — editable */}
+                {/* Meal name */}
                 {isEditing ? (
                   <TextInput
                     style={[styles.mealNameInput, { color: colors.text, borderColor: accent }]}
@@ -239,10 +300,9 @@ export default function PlanScreen() {
                   ))}
                 </View>
 
-                {/* Action buttons — visible when expanded */}
+                {/* Action buttons */}
                 {expanded && (
                   <View style={styles.actionRow}>
-                    {/* Lock */}
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: isLocked ? colors.lime : colors.border, backgroundColor: isLocked ? colors.limeDim : 'transparent' }]}
                       onPress={(e) => { e.stopPropagation?.(); lockMeal(selectedDay, idx); }}
@@ -253,7 +313,6 @@ export default function PlanScreen() {
                       </Text>
                     </TouchableOpacity>
 
-                    {/* Edit */}
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border }]}
                       onPress={(e) => { e.stopPropagation?.(); setEditDraft(meal.name); setEditingIdx(idx); }}
@@ -262,20 +321,15 @@ export default function PlanScreen() {
                       <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Edit</Text>
                     </TouchableOpacity>
 
-                    {/* Swap */}
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border, opacity: isLocked ? 0.4 : 1 }]}
-                      onPress={(e) => { e.stopPropagation?.(); if (!isLocked) swapMeal(selectedDay, idx); }}
+                      onPress={(e) => { e.stopPropagation?.(); if (!isLocked) openSwapModal(selectedDay, idx); }}
                       disabled={isLocked || isSwapping}
                     >
-                      {isSwapping
-                        ? <ActivityIndicator size="small" color={colors.blue} />
-                        : <Text style={styles.actionBtnIcon}>🔁</Text>
-                      }
+                      <Text style={styles.actionBtnIcon}>🔁</Text>
                       <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Swap</Text>
                     </TouchableOpacity>
 
-                    {/* Log */}
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: isLogged ? colors.lime : colors.border, backgroundColor: isLogged ? colors.limeDim : 'transparent' }]}
                       onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
@@ -288,7 +342,6 @@ export default function PlanScreen() {
                   </View>
                 )}
 
-                {/* Quick log button always visible */}
                 <TouchableOpacity
                   style={[styles.logBtn, { backgroundColor: isLogged ? colors.surface3 : colors.lime }]}
                   onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
@@ -302,9 +355,188 @@ export default function PlanScreen() {
           })}
         </View>
       </ScrollView>
+
+      {/* Swap modal */}
+      <Modal
+        visible={!!swapState}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSwapState(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+            {swapState && (
+              <SwapModal
+                state={swapState}
+                colors={colors}
+                onChange={setSwapState}
+                onAIGenerate={runAISwap}
+                onTikTokAnalyze={runTikTokSwap}
+                onConfirm={confirmSwap}
+                onClose={() => setSwapState(null)}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+// ─── Swap Modal ───────────────────────────────────────────────────────────────
+
+interface SwapModalProps {
+  state: SwapState;
+  colors: any;
+  onChange: (s: SwapState) => void;
+  onAIGenerate: () => void;
+  onTikTokAnalyze: () => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onConfirm, onClose }: SwapModalProps) {
+  const set = (patch: Partial<SwapState>) => onChange({ ...state, ...patch });
+
+  return (
+    <>
+      <View style={styles.sheetHandle} />
+      <View style={styles.modalHeader}>
+        <Text style={[styles.modalTitle, { color: colors.text }]}>Swap Meal</Text>
+        <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.surface3 }]} onPress={onClose}>
+          <Text style={[styles.closeBtnText, { color: colors.text2 }]}>✕</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* ── Phase: choose ── */}
+        {state.phase === 'choose' && (
+          <View style={styles.chooseGrid}>
+            <TouchableOpacity
+              style={[styles.chooseCard, { borderColor: colors.lime, backgroundColor: `${colors.lime}10` }]}
+              onPress={() => set({ phase: 'ai' })}
+            >
+              <Text style={styles.chooseIcon}>🤖</Text>
+              <Text style={[styles.chooseTitle, { color: colors.text }]}>AI Generate</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Let AI suggest a new meal with your preferences</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chooseCard, { borderColor: colors.blue, backgroundColor: `${colors.blue}10` }]}
+              onPress={() => set({ phase: 'tiktok' })}
+            >
+              <Text style={styles.chooseIcon}>🎵</Text>
+              <Text style={[styles.chooseTitle, { color: colors.text }]}>From TikTok</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Paste a TikTok recipe video URL</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Phase: ai input ── */}
+        {state.phase === 'ai' && (
+          <View style={styles.inputPhase}>
+            <Text style={[styles.inputLabel, { color: colors.text3 }]}>PREFERENCES (OPTIONAL)</Text>
+            <TextInput
+              style={[styles.textArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+              placeholder="e.g. high protein, vegetarian, quick to make…"
+              placeholderTextColor={colors.text3}
+              value={state.preferences}
+              onChangeText={v => set({ preferences: v })}
+              multiline
+              numberOfLines={3}
+            />
+            {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onAIGenerate}>
+              <Text style={[styles.primaryBtnText, { color: colors.background }]}>Generate Meal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backBtn} onPress={() => set({ phase: 'choose', error: null })}>
+              <Text style={[styles.backBtnText, { color: colors.text3 }]}>← Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Phase: tiktok input ── */}
+        {state.phase === 'tiktok' && (
+          <View style={styles.inputPhase}>
+            <Text style={[styles.inputLabel, { color: colors.text3 }]}>TIKTOK VIDEO URL</Text>
+            <TextInput
+              style={[styles.urlInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+              placeholder="https://www.tiktok.com/@..."
+              placeholderTextColor={colors.text3}
+              value={state.tiktokUrl}
+              onChangeText={v => set({ tiktokUrl: v })}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: colors.blue, opacity: state.tiktokUrl.trim() ? 1 : 0.4 }]}
+              onPress={onTikTokAnalyze}
+              disabled={!state.tiktokUrl.trim()}
+            >
+              <Text style={[styles.primaryBtnText, { color: '#fff' }]}>Analyze Recipe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backBtn} onPress={() => set({ phase: 'choose', error: null })}>
+              <Text style={[styles.backBtnText, { color: colors.text3 }]}>← Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Phase: loading ── */}
+        {state.phase === 'loading' && (
+          <View style={styles.loadingPhase}>
+            <ActivityIndicator color={colors.lime} size="large" />
+            <Text style={[styles.loadingMsg, { color: colors.text3 }]}>Generating your meal…</Text>
+          </View>
+        )}
+
+        {/* ── Phase: preview ── */}
+        {state.phase === 'preview' && state.candidate && (
+          <View style={styles.previewPhase}>
+            <Text style={[styles.previewLabel, { color: colors.text3 }]}>NEW MEAL PREVIEW</Text>
+            <View style={[styles.previewCard, { backgroundColor: colors.surface2, borderColor: colors.lime }]}>
+              <Text style={[styles.previewName, { color: colors.text }]}>{state.candidate.name}</Text>
+              <View style={styles.previewMacros}>
+                {[
+                  { v: `${state.candidate.protein_g}g`, l: 'Protein', c: colors.lime },
+                  { v: `${state.candidate.carbs_g}g`, l: 'Carbs', c: colors.blue },
+                  { v: `${state.candidate.fat_g}g`, l: 'Fat', c: colors.orange },
+                  { v: `${state.candidate.calories}`, l: 'kcal', c: colors.text },
+                ].map(m => (
+                  <View key={m.l} style={styles.previewMacroItem}>
+                    <Text style={[styles.previewMacroVal, { color: m.c }]}>{m.v}</Text>
+                    <Text style={[styles.previewMacroLabel, { color: colors.text3 }]}>{m.l}</Text>
+                  </View>
+                ))}
+              </View>
+              {state.candidate.ingredients.length > 0 && (
+                <View style={styles.previewIngredients}>
+                  <Text style={[styles.previewIngrTitle, { color: colors.text3 }]}>INGREDIENTS</Text>
+                  {state.candidate.ingredients.map((ing, i) => (
+                    <Text key={i} style={[styles.previewIngr, { color: colors.text2 }]}>• {ing}</Text>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onConfirm}>
+              <Text style={[styles.primaryBtnText, { color: colors.background }]}>Use This Meal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              onPress={() => set({ phase: state.tiktokUrl ? 'tiktok' : 'ai', candidate: null })}
+            >
+              <Text style={[styles.secondaryBtnText, { color: colors.text2 }]}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -362,4 +594,45 @@ const styles = StyleSheet.create({
   actionBtnLabel: { fontSize: 10, fontWeight: '600' },
   logBtn: { marginVertical: 10, marginHorizontal: 16, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   logBtnText: { fontSize: 14, fontWeight: '600' },
+  // modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: '700' },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  closeBtnText: { fontSize: 14, fontWeight: '700' },
+  // choose phase
+  chooseGrid: { gap: 12, marginBottom: 8 },
+  chooseCard: { borderWidth: 1.5, borderRadius: 20, padding: 20, gap: 8 },
+  chooseIcon: { fontSize: 32 },
+  chooseTitle: { fontSize: 18, fontWeight: '700' },
+  chooseDesc: { fontSize: 13, lineHeight: 18 },
+  // input phase
+  inputPhase: { gap: 12 },
+  inputLabel: { fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase' },
+  textArea: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 90, textAlignVertical: 'top' },
+  urlInput: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15 },
+  errorMsg: { fontSize: 13 },
+  primaryBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  primaryBtnText: { fontSize: 15, fontWeight: '700' },
+  secondaryBtn: { borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  secondaryBtnText: { fontSize: 15, fontWeight: '600' },
+  backBtn: { alignItems: 'center', paddingVertical: 8 },
+  backBtnText: { fontSize: 14 },
+  // loading phase
+  loadingPhase: { alignItems: 'center', paddingVertical: 48, gap: 16 },
+  loadingMsg: { fontSize: 15 },
+  // preview phase
+  previewPhase: { gap: 16 },
+  previewLabel: { fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase' },
+  previewCard: { borderWidth: 1.5, borderRadius: 20, padding: 18, gap: 12 },
+  previewName: { fontSize: 19, fontWeight: '700', lineHeight: 24 },
+  previewMacros: { flexDirection: 'row', gap: 0 },
+  previewMacroItem: { flex: 1, alignItems: 'center' },
+  previewMacroVal: { fontSize: 15, fontWeight: '700' },
+  previewMacroLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.08 },
+  previewIngredients: { gap: 6 },
+  previewIngrTitle: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.12 },
+  previewIngr: { fontSize: 13, lineHeight: 20 },
 });

@@ -9,6 +9,7 @@ import {
   getWeekKey,
   swapMeal as apiSwapMeal,
 } from '@/services/api';
+import { supabase } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,10 @@ interface MenuContextValue {
   swapMeal: (day: DayKey, idx: number) => Promise<void>;
   // add TikTok recipe to a specific day slot
   addTiktokMeal: (day: DayKey, slotIdx: number, recipe: TiktokRecipe) => void;
+  // apply any meal directly (used by swap modal preview confirm)
+  applyMealOverride: (day: DayKey, idx: number, meal: Meal) => void;
+  // persist current plan (with overrides) to Supabase
+  persistCurrentPlan: () => Promise<void>;
   // effective meal (base + overrides)
   getEffectiveDayPlan: (day: DayKey) => DayPlan | null;
 }
@@ -50,6 +55,8 @@ const MenuContext = createContext<MenuContextValue>({
   editMealName: () => {},
   swappingMeal: null, swapMeal: async () => {},
   addTiktokMeal: () => {},
+  applyMealOverride: () => {},
+  persistCurrentPlan: async () => {},
   getEffectiveDayPlan: () => null,
 });
 
@@ -169,6 +176,32 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     }
   }, [plan]);
 
+  // ── Apply any meal override directly ──────────────────────────────────────
+
+  const applyMealOverride = useCallback((day: DayKey, idx: number, meal: Meal) => {
+    setMealOverrides(prev => ({
+      ...prev,
+      [day]: { ...prev[day], [idx]: meal },
+    }));
+  }, []);
+
+  // ── Persist current plan (with overrides) to Supabase ─────────────────────
+
+  const persistCurrentPlan = useCallback(async () => {
+    if (!plan) return;
+    const weekKey = getWeekKey();
+    const effectiveDays = plan.days.map(d => {
+      const overrides = mealOverrides[d.day] ?? {};
+      const meals = d.meals.map((meal, i) =>
+        overrides[i] ? { ...meal, ...overrides[i] } as Meal : meal
+      );
+      return { ...d, meals };
+    });
+    await supabase
+      .from('weekly_plans')
+      .upsert({ week_key: weekKey, plan_text: JSON.stringify({ days: effectiveDays }), created_at: new Date().toISOString() });
+  }, [plan, mealOverrides]);
+
   // ── Add TikTok meal ────────────────────────────────────────────────────────
 
   const addTiktokMeal = useCallback((day: DayKey, slotIdx: number, recipe: TiktokRecipe) => {
@@ -211,6 +244,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       editMealName,
       swappingMeal, swapMeal,
       addTiktokMeal,
+      applyMealOverride,
+      persistCurrentPlan,
       getEffectiveDayPlan,
     }}>
       {children}
