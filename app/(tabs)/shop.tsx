@@ -28,6 +28,9 @@ const AISLES = [
 const AISLE_OTHER = { label: 'Épicerie', icon: '🧺', color: '#888888' };
 const ALL_AISLES  = [...AISLES, AISLE_OTHER];
 
+// French/English stopwords to strip before matching
+const STOPWORDS = new Set(['les','des','du','de','la','le','un','une','au','aux','sur','par','et','ou','avec','sans','pour','dans','en','the','and','of','with','from','fresh','frais','fraiche','bio','extra','special']);
+
 function norm(s: string) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
@@ -36,10 +39,44 @@ function getAisle(name: string) {
   for (const a of AISLES) if (a.keywords.some(k => n.includes(k))) return a.label;
   return AISLE_OTHER.label;
 }
+
+// Returns the catalog entry with the most keyword overlap, preferring entries
+// that have an image_url. Falls back to any partial match if needed.
 function matchCatalog(name: string, catalog: LidlPromoDetail[]): LidlPromoDetail | undefined {
-  const words = norm(name).replace(/lidl/g, '').trim().split(/\s+/).filter(w => w.length > 2);
-  return catalog.find(p => { const t = norm(p.title); return words.some(w => t.includes(w)); });
+  const words = norm(name)
+    .replace(/lidl/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+
+  if (!words.length) return undefined;
+
+  let best: LidlPromoDetail | undefined;
+  let bestScore = 0;
+
+  for (const p of catalog) {
+    const t = norm(p.title);
+    const matches = words.filter(w => t.includes(w)).length;
+    if (matches === 0) continue;
+    // Weight: word overlap × 10, bonus +5 if the entry has an image
+    const score = matches * 10 + (p.image_url ? 5 : 0);
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+
+  return best;
 }
+
+// Per-aisle fallback emoji for items without a product image
+const AISLE_FALLBACK: Record<string, string> = {
+  'Viandes & Poissons':   '🥩',
+  'Produits laitiers':    '🧀',
+  'Fruits & Légumes':     '🥬',
+  'Céréales & Féculents': '🌾',
+  'Huiles & Condiments':  '🫒',
+  'Boissons':             '🥤',
+  'Surgelés':             '❄️',
+  'Épicerie':             '🧺',
+};
 
 interface GroceryItem {
   id: string; name: string; isLidl: boolean; aisle: string;
@@ -138,14 +175,17 @@ export default function ShopScreen() {
 
         {/* Product image */}
         <View style={styles.thumbWrap}>
-          {item.image_url
-            ? <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
-            : (
-              <View style={[styles.thumbFallback, { backgroundColor: item.isLidl ? C.limeDim : C.surface2 }]}>
-                <Text style={styles.thumbEmoji}>{item.isLidl ? '🛒' : '🌿'}</Text>
-              </View>
-            )
-          }
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
+          ) : (
+            <View style={[styles.thumbFallback, {
+              backgroundColor: item.isLidl ? C.limeDim : C.surface2,
+            }]}>
+              <Text style={styles.thumbEmoji}>
+                {AISLE_FALLBACK[item.aisle] ?? '🛒'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Name + price */}
