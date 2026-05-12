@@ -19,6 +19,7 @@ interface MenuContextValue {
   plan: MenuPlan | null;
   isLoading: boolean;
   error: string | null;
+  planExistsInDB: boolean;                          // true = loaded from cache, false = AI ran
   refresh: () => void;                              // force-regenerate
   // logging
   loggedMeals: Record<DayKey, Set<number>>;
@@ -42,7 +43,7 @@ interface MenuContextValue {
 // ─── Context ─────────────────────────────────────────────────────────────────
 
 const MenuContext = createContext<MenuContextValue>({
-  plan: null, isLoading: false, error: null, refresh: () => {},
+  plan: null, isLoading: false, error: null, planExistsInDB: false, refresh: () => {},
   loggedMeals: {}, logMeal: () => {}, getEatenCalories: () => 0,
   getEatenMacros: () => ({ protein_g: 0, carbs_g: 0, fat_g: 0 }),
   lockedMeals: {}, lockMeal: () => {},
@@ -58,12 +59,13 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = useState<MenuPlan | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [planExistsInDB, setPlanExistsInDB] = useState(false);
   const [loggedMeals, setLoggedMeals] = useState<Record<DayKey, Set<number>>>({});
   const [lockedMeals, setLockedMeals] = useState<Record<DayKey, Set<number>>>({});
   const [mealOverrides, setMealOverrides] = useState<MealOverrides>({});
   const [swappingMeal, setSwappingMeal] = useState<{ day: DayKey; idx: number } | null>(null);
 
-  // Load: check Supabase cache first, generate only if missing
+  // Load: check Supabase cache first, run AI only if planExistsInDB is false
   const load = useCallback(async (forceRegenerate = false) => {
     setIsLoading(true);
     setError(null);
@@ -73,13 +75,17 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       if (!forceRegenerate) {
         const cached = await fetchWeeklyPlan(weekKey);
         if (cached) {
+          setPlanExistsInDB(true);   // plan found in DB — skip AI
           setPlan(cached);
           return;
         }
       }
 
+      // planExistsInDB is false — AI generation required
+      setPlanExistsInDB(false);
       const fresh = await generateMenuPlan({ days: 7, mealsPerDay: 3, targetCalories: 2000 });
       setPlan(fresh);
+      setPlanExistsInDB(true);       // will be persisted by the backend after this
       setLoggedMeals({});
       setLockedMeals({});
       setMealOverrides({});
@@ -199,7 +205,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MenuContext.Provider value={{
-      plan, isLoading, error, refresh: () => load(true),
+      plan, isLoading, error, planExistsInDB, refresh: () => load(true),
       loggedMeals, logMeal, getEatenCalories, getEatenMacros,
       lockedMeals, lockMeal,
       editMealName,

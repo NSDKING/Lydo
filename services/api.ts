@@ -38,6 +38,14 @@ export interface AdaptedIngredient {
   note: string;
 }
 
+export interface LidlPromoDetail {
+  title: string;
+  price: string;
+  old_price?: string;
+  discount_percent?: number;
+  image_url?: string;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function timeout(ms: number): { signal: AbortSignal; clear: () => void } {
@@ -123,6 +131,15 @@ export async function swapMeal(dayPlan: DayPlan, mealIndex: number): Promise<Mea
 export async function analyzeTiktok(url: string): Promise<TiktokRecipe> {
   const data = await post<{ recipe: TiktokRecipe }>('/tiktok/analyze', { tiktokUrl: url }, 120_000);
   return data.recipe;
+}
+
+export async function fetchLidlCatalog(): Promise<LidlPromoDetail[]> {
+  try {
+    const data = await get<{ products: LidlPromoDetail[] }>('/lidl/catalog', 10_000);
+    return data.products ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function adaptRecipeWithLidl(
