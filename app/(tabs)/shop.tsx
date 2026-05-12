@@ -17,16 +17,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // ─── Aisle config ─────────────────────────────────────────────────────────────
 
 const AISLES = [
-  { label: 'Viandes & Poissons',  icon: '🥩', color: '#ff6b35', keywords: ['poulet','chicken','boeuf','beef','porc','pork','saumon','salmon','thon','tuna','filet','steak','jambon','ham','lardons','dinde','cabillaud','crevette','shrimp','viande','meat','veau','agneau','lamb','merguez','chorizo'] },
-  { label: 'Produits laitiers',   icon: '🥛', color: '#4d9fff', keywords: ['fromage','cheese','yaourt','yogurt','lait','milk','beurre','butter','creme','cream','oeuf','egg','mozzarella','parmesan','emmental','ricotta','gruyere'] },
-  { label: 'Fruits & Légumes',    icon: '🥦', color: '#b5f23d', keywords: ['tomate','tomato','carotte','carrot','courgette','zucchini','salade','lettuce','epinard','spinach','pomme','apple','orange','banane','banana','oignon','onion','ail','garlic','poivron','avocat','avocado','concombre','cucumber','brocoli','broccoli','champignon','mushroom','celeri','poireau','leek','radis','navet','fruit','legume','vegetable'] },
-  { label: 'Céréales & Féculents',icon: '🌾', color: '#ffc35c', keywords: ['riz','rice','pate','pasta','pain','bread','farine','flour','quinoa','avoine','oat','semoule','couscous','lentille','lentil','haricot','bean','potato','patate','cereale','cereal','ble','wheat','pois chiche','chickpea','boulgour','bulgur'] },
-  { label: 'Huiles & Condiments', icon: '🫒', color: '#c47fff', keywords: ['huile','oil','vinaigre','vinegar','moutarde','mustard','ketchup','sauce','sel','salt','poivre','pepper','epice','spice','herbe','herb','mayonnaise','pesto','coulis','concentre','cornichon','bouillon','curry','cumin','paprika','cannelle','cinnamon'] },
-  { label: 'Boissons',            icon: '🥤', color: '#3dd9f2', keywords: ['eau','water','jus','juice','cafe','coffee','the ','tea','boisson','drink','soda','limonade'] },
-  { label: 'Surgelés',            icon: '❄️', color: '#80e5ff', keywords: ['surgele','frozen','glace','ice cream'] },
+  { label: 'Viandes & Poissons',   icon: '🥩', color: '#ff6b35', keywords: ['poulet','chicken','boeuf','beef','porc','pork','saumon','salmon','thon','tuna','filet','steak','jambon','ham','lardons','dinde','cabillaud','crevette','shrimp','viande','meat','veau','agneau','lamb','merguez','chorizo'] },
+  { label: 'Produits laitiers',    icon: '🥛', color: '#4d9fff', keywords: ['fromage','cheese','yaourt','yogurt','lait','milk','beurre','butter','creme','cream','oeuf','egg','mozzarella','parmesan','emmental','ricotta','gruyere'] },
+  { label: 'Fruits & Légumes',     icon: '🥦', color: '#b5f23d', keywords: ['tomate','tomato','carotte','carrot','courgette','zucchini','salade','lettuce','epinard','spinach','pomme','apple','orange','banane','banana','oignon','onion','ail','garlic','poivron','avocat','avocado','concombre','cucumber','brocoli','broccoli','champignon','mushroom','celeri','poireau','leek','radis','navet','fruit','legume','vegetable'] },
+  { label: 'Céréales & Féculents', icon: '🌾', color: '#ffc35c', keywords: ['riz','rice','pate','pasta','pain','bread','farine','flour','quinoa','avoine','oat','semoule','couscous','lentille','lentil','haricot','bean','potato','patate','cereale','cereal','ble','wheat','pois chiche','chickpea','boulgour','bulgur'] },
+  { label: 'Huiles & Condiments',  icon: '🫒', color: '#c47fff', keywords: ['huile','oil','vinaigre','vinegar','moutarde','mustard','ketchup','sauce','sel','salt','poivre','pepper','epice','spice','herbe','herb','mayonnaise','pesto','coulis','concentre','cornichon','bouillon','curry','cumin','paprika','cannelle','cinnamon'] },
+  { label: 'Boissons',             icon: '🥤', color: '#3dd9f2', keywords: ['eau','water','jus','juice','cafe','coffee','the ','tea','boisson','drink','soda','limonade'] },
+  { label: 'Surgelés',             icon: '❄️', color: '#80e5ff', keywords: ['surgele','frozen','glace','ice cream'] },
 ];
-const AISLE_OTHER = { label: 'Épicerie', icon: '🧺', color: '#7a7a7a' };
-const ALL_AISLES = [...AISLES, AISLE_OTHER];
+const AISLE_OTHER = { label: 'Épicerie', icon: '🧺', color: '#888888' };
+const ALL_AISLES  = [...AISLES, AISLE_OTHER];
 
 function norm(s: string) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -41,68 +41,53 @@ function matchCatalog(name: string, catalog: LidlPromoDetail[]): LidlPromoDetail
   return catalog.find(p => { const t = norm(p.title); return words.some(w => t.includes(w)); });
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface GroceryItem {
-  id: string;
-  name: string;
-  isLidl: boolean;
-  aisle: string;
-  price?: string;
-  old_price?: string;
-  discount_percent?: number;
-  image_url?: string;
+  id: string; name: string; isLidl: boolean; aisle: string;
+  price?: string; old_price?: string; discount_percent?: number; image_url?: string;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ShopScreen() {
   const colorScheme = useColorScheme();
   const C = Colors[colorScheme ?? 'dark'];
   const { plan, isLoading: planLoading } = useMenu();
 
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
-  const [catalog, setCatalog]           = useState<LidlPromoDetail[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [collapsedAisles, setCollapsedAisles] = useState<Set<string>>(new Set());
+  const [checked, setChecked]       = useState<Set<string>>(new Set());
+  const [catalog, setCatalog]       = useState<LidlPromoDetail[]>([]);
+  const [catalogLoading, setCL]     = useState(false);
+  const [collapsed, setCollapsed]   = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!plan) return;
-    setCatalogLoading(true);
-    fetchLidlCatalog().then(setCatalog).finally(() => setCatalogLoading(false));
+    setCL(true);
+    fetchLidlCatalog().then(setCatalog).finally(() => setCL(false));
   }, [plan]);
 
-  const toggleCheck = (id: string) =>
-    setCheckedItems(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle   = (id: string)    => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const collapse = (label: string) => setCollapsed(p => { const n = new Set(p); n.has(label) ? n.delete(label) : n.add(label); return n; });
 
-  const toggleAisle = (label: string) =>
-    setCollapsedAisles(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
-
-  // ── Enrich + group ──────────────────────────────────────────────────────────
   const aisleMap = useMemo((): Map<string, GroceryItem[]> => {
     if (!plan) return new Map();
-    const lidlSeen = new Set<string>(), otherSeen = new Set<string>();
+    const lSeen = new Set<string>(), oSeen = new Set<string>();
     const items: GroceryItem[] = [];
-
     for (const day of plan.days) {
       for (const meal of day.meals) {
-        for (const product of meal.lidl_products_used) {
-          const key = product.toLowerCase().trim();
-          if (lidlSeen.has(key)) continue;
-          lidlSeen.add(key);
-          const m = matchCatalog(product, catalog);
-          items.push({ id: `l-${key}`, name: m?.title ?? product, isLidl: true, aisle: getAisle(product), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url });
+        for (const p of meal.lidl_products_used) {
+          const k = p.toLowerCase().trim();
+          if (lSeen.has(k)) continue; lSeen.add(k);
+          const m = matchCatalog(p, catalog);
+          items.push({ id: `l-${k}`, name: m?.title ?? p, isLidl: true, aisle: getAisle(p), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url });
         }
         for (const ing of meal.ingredients) {
           const stripped = ing.replace(/^\d+[gmlkgL\s]+/i, '').trim();
-          const key = stripped.toLowerCase();
-          if ([...lidlSeen].some(l => l.includes(key) || key.includes(l)) || otherSeen.has(key)) continue;
-          otherSeen.add(key);
-          items.push({ id: `o-${key}`, name: ing, isLidl: false, aisle: getAisle(ing) });
+          const k = stripped.toLowerCase();
+          if ([...lSeen].some(l => l.includes(k) || k.includes(l)) || oSeen.has(k)) continue;
+          oSeen.add(k);
+          items.push({ id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing) });
         }
       }
     }
-
     const map = new Map<string, GroceryItem[]>();
     for (const a of ALL_AISLES) map.set(a.label, []);
     for (const item of items) map.get(item.aisle)!.push(item);
@@ -110,56 +95,70 @@ export default function ShopScreen() {
     return map;
   }, [plan, catalog]);
 
-  const allItems     = useMemo(() => [...aisleMap.values()].flat(), [aisleMap]);
-  const doneCount    = allItems.filter(i => checkedItems.has(i.id)).length;
-  const totalItems   = allItems.length;
-  const pct          = totalItems ? Math.round((doneCount / totalItems) * 100) : 0;
-  const lidlCount    = allItems.filter(i => i.isLidl).length;
-  const totalSavings = useMemo(() => allItems.reduce((sum, item) => {
-    if (!item.price || !item.old_price) return sum;
-    const curr = parseFloat(item.price), old = parseFloat(item.old_price);
-    return !isNaN(curr) && !isNaN(old) ? sum + (old - curr) : sum;
+  const allItems   = useMemo(() => [...aisleMap.values()].flat(), [aisleMap]);
+  const doneCount  = allItems.filter(i => checked.has(i.id)).length;
+  const total      = allItems.length;
+  const pct        = total ? Math.round((doneCount / total) * 100) : 0;
+  const lidlCount  = allItems.filter(i => i.isLidl).length;
+  const savings    = useMemo(() => allItems.reduce((s, i) => {
+    if (!i.price || !i.old_price) return s;
+    const c = parseFloat(i.price), o = parseFloat(i.old_price);
+    return !isNaN(c) && !isNaN(o) ? s + (o - c) : s;
   }, 0), [allItems]);
 
   const isLoading = planLoading || catalogLoading;
 
-  // ── Renderers ───────────────────────────────────────────────────────────────
   const renderItem = (item: GroceryItem) => {
-    const checked = checkedItems.has(item.id);
+    const isChecked = checked.has(item.id);
     return (
       <TouchableOpacity
         key={item.id}
-        style={[styles.itemRow, { backgroundColor: C.surface }]}
-        onPress={() => toggleCheck(item.id)}
-        activeOpacity={0.7}
+        style={[
+          styles.itemRow,
+          {
+            backgroundColor: isChecked ? 'rgba(181,242,61,0.05)' : C.surface,
+            borderColor:     isChecked ? 'rgba(181,242,61,0.22)' : C.border,
+            borderLeftColor: isChecked ? C.lime : C.border,
+            borderLeftWidth: isChecked ? 3 : 1,
+          },
+        ]}
+        onPress={() => toggle(item.id)}
+        activeOpacity={0.75}
       >
         {/* Checkbox */}
-        <View style={[styles.check, {
-          backgroundColor: checked ? C.lime : 'transparent',
-          borderColor:     checked ? C.lime : C.border2,
-        }]}>
-          {checked && <Text style={styles.checkMark}>✓</Text>}
+        <View style={[
+          styles.checkBox,
+          {
+            backgroundColor: isChecked ? C.lime : 'transparent',
+            borderColor:     isChecked ? C.lime : C.border2,
+          },
+        ]}>
+          {isChecked && <Text style={styles.checkMark}>✓</Text>}
         </View>
 
-        {/* Thumb */}
+        {/* Product image */}
         <View style={styles.thumbWrap}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
-          ) : (
-            <View style={[styles.thumbFallback, { backgroundColor: item.isLidl ? C.limeDim : C.surface2 }]}>
-              <Text style={styles.thumbEmoji}>{item.isLidl ? '🛒' : '🌿'}</Text>
-            </View>
-          )}
+          {item.image_url
+            ? <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
+            : (
+              <View style={[styles.thumbFallback, { backgroundColor: item.isLidl ? C.limeDim : C.surface2 }]}>
+                <Text style={styles.thumbEmoji}>{item.isLidl ? '🛒' : '🌿'}</Text>
+              </View>
+            )
+          }
         </View>
 
-        {/* Info */}
-        <View style={[styles.itemBody, { opacity: checked ? 0.45 : 1 }]}>
+        {/* Name + price */}
+        <View style={[styles.itemBody, { opacity: isChecked ? 0.42 : 1 }]}>
           <Text
-            style={[styles.itemName, {
-              color: checked ? C.text3 : C.text,
-              textDecorationLine: checked ? 'line-through' : 'none',
-            }]}
             numberOfLines={2}
+            style={[
+              styles.itemName,
+              {
+                color: C.text,
+                textDecorationLine: isChecked ? 'line-through' : 'none',
+              },
+            ]}
           >
             {item.name}
           </Text>
@@ -173,14 +172,14 @@ export default function ShopScreen() {
           ) : null}
         </View>
 
-        {/* Right badge */}
+        {/* Badge */}
         {item.discount_percent ? (
-          <View style={[styles.saleBadge, { backgroundColor: C.orangeDim, borderColor: `${C.orange}55` }]}>
-            <Text style={[styles.saleText, { color: C.orange }]}>-{item.discount_percent}%</Text>
+          <View style={[styles.badge, { backgroundColor: C.orangeDim, borderColor: `${C.orange}50` }]}>
+            <Text style={[styles.badgeText, { color: C.orange }]}>-{item.discount_percent}%</Text>
           </View>
         ) : item.isLidl ? (
-          <View style={[styles.lidlDot, { backgroundColor: C.limeDim }]}>
-            <Text style={[styles.lidlDotText, { color: C.lime }]}>L</Text>
+          <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
+            <Text style={[styles.badgeText, { color: C.lime }]}>LIDL</Text>
           </View>
         ) : null}
       </TouchableOpacity>
@@ -191,46 +190,55 @@ export default function ShopScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* ── Header ─────────────────────────────────────────────────── */}
+        {/* ─── Header ─────────────────────────────────────────────────── */}
         <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={styles.headerLeft}>
+          {/* Title row */}
+          <View style={styles.titleRow}>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: C.text }]}>Shopping List</Text>
               <Text style={[styles.subtitle, { color: C.text3 }]}>
-                {plan ? `${totalItems} items this week` : "This week's groceries"}
+                {plan ? `${total} items · week of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : "This week's groceries"}
               </Text>
             </View>
 
             {/* Progress ring */}
-            {totalItems > 0 && (
-              <View style={[styles.progressRing, {
-                borderColor: pct === 100 ? C.lime : C.surface2,
-                backgroundColor: pct === 100 ? C.limeDim : C.surface,
-              }]}>
-                <Text style={[styles.progressPct, { color: pct === 100 ? C.lime : C.text }]}>{pct}<Text style={styles.progressPctSuffix}>%</Text></Text>
-                <Text style={[styles.progressDone, { color: C.text3 }]}>{doneCount}/{totalItems}</Text>
+            {total > 0 && (
+              <View style={[styles.ringOuter, { borderColor: C.border }]}>
+                <View style={[styles.ringInner, {
+                  borderColor: pct === 100 ? C.lime : C.surface2,
+                  backgroundColor: pct === 100 ? C.limeDim : 'transparent',
+                }]}>
+                  <Text style={[styles.ringPct, { color: pct === 100 ? C.lime : C.text }]}>
+                    {pct}<Text style={[styles.ringPctUnit, { color: C.text3 }]}>%</Text>
+                  </Text>
+                  <Text style={[styles.ringDone, { color: C.text3 }]}>{doneCount}/{total}</Text>
+                </View>
               </View>
             )}
           </View>
 
           {/* Progress bar */}
-          {totalItems > 0 && (
+          {total > 0 && (
             <View style={[styles.progressTrack, { backgroundColor: C.surface2 }]}>
               <View style={[styles.progressFill, { backgroundColor: C.lime, width: `${pct}%` }]} />
             </View>
           )}
 
-          {/* Savings chip */}
-          {totalSavings > 0.01 && (
-            <View style={[styles.savingsChip, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
-              <Text style={[styles.savingsText, { color: C.lime }]}>
-                💰  Save up to <Text style={{ fontWeight: '700' }}>€{totalSavings.toFixed(2)}</Text> with Lidl promos
-              </Text>
+          {/* Savings callout */}
+          {savings > 0.01 && (
+            <View style={[styles.savingsCard, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.2)' }]}>
+              <View style={[styles.savingsIconWrap, { backgroundColor: 'rgba(181,242,61,0.18)' }]}>
+                <Text style={styles.savingsIconText}>💰</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.savingsAmount, { color: C.lime }]}>Save up to €{savings.toFixed(2)}</Text>
+                <Text style={[styles.savingsLabel, { color: C.text3 }]}>with Lidl promotions this week</Text>
+              </View>
             </View>
           )}
         </View>
 
-        {/* ── Loading ─────────────────────────────────────────────────── */}
+        {/* ─── Loading ─────────────────────────────────────────────────── */}
         {isLoading && (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={C.lime} size="small" />
@@ -240,61 +248,71 @@ export default function ShopScreen() {
           </View>
         )}
 
-        {/* ── Content ─────────────────────────────────────────────────── */}
+        {/* ─── Content ─────────────────────────────────────────────────── */}
         {!planLoading && plan && (
           <>
-            {/* Promo banner */}
+            {/* Lidl banner */}
             {lidlCount > 0 && (
-              <View style={[styles.promoBanner, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.2)' }]}>
-                <View style={[styles.promoDot, { backgroundColor: C.lime }]} />
-                <Text style={[styles.promoText, { color: C.text2 }]}>
-                  <Text style={{ color: C.lime, fontWeight: '700' }}>{lidlCount}</Text> items available at Lidl this week
+              <View style={[styles.lidlBanner, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={[styles.lidlDot, { backgroundColor: C.lime }]} />
+                <Text style={[styles.lidlBannerText, { color: C.text2 }]}>
+                  <Text style={{ color: C.lime, fontWeight: '700' }}>{lidlCount} items</Text> available at Lidl this week
                 </Text>
               </View>
             )}
 
-            {/* Aisles */}
+            {/* ─── Aisle sections ────────────────────────────────────── */}
             {[...aisleMap.entries()].map(([label, items]) => {
-              const meta      = ALL_AISLES.find(a => a.label === label) ?? AISLE_OTHER;
-              const collapsed = collapsedAisles.has(label);
-              const done      = items.filter(i => checkedItems.has(i.id)).length;
-              const allDone   = done === items.length;
-              const fillPct   = items.length ? (done / items.length) * 100 : 0;
+              const meta     = ALL_AISLES.find(a => a.label === label) ?? AISLE_OTHER;
+              const isCol    = collapsed.has(label);
+              const done     = items.filter(i => checked.has(i.id)).length;
+              const allDone  = done === items.length && items.length > 0;
+              const fill     = items.length ? (done / items.length) * 100 : 0;
 
               return (
                 <View key={label} style={styles.aisleSection}>
-                  {/* Aisle header */}
+                  {/* Department header */}
                   <TouchableOpacity
                     style={[styles.aisleHeader, {
-                      backgroundColor: C.surface,
+                      backgroundColor: meta.color + '14',
+                      borderColor:     meta.color + '30',
                       borderLeftColor: meta.color,
                     }]}
-                    onPress={() => toggleAisle(label)}
+                    onPress={() => collapse(label)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.aisleIconWrap, { backgroundColor: meta.color + '20' }]}>
+                    {/* Icon */}
+                    <View style={[styles.aisleIconWrap, { backgroundColor: meta.color + '22' }]}>
                       <Text style={styles.aisleIcon}>{meta.icon}</Text>
                     </View>
 
-                    <View style={styles.aisleTitleCol}>
-                      <Text style={[styles.aisleLabel, { color: allDone ? C.text3 : C.text }]}>{label}</Text>
-                      <View style={[styles.aisleProgTrack, { backgroundColor: C.surface2 }]}>
+                    {/* Label + progress bar */}
+                    <View style={styles.aisleTitleBlock}>
+                      <Text style={[styles.aisleLabel, { color: allDone ? C.text3 : C.text }]} numberOfLines={1}>
+                        {label}
+                      </Text>
+                      <View style={[styles.aisleProg, { backgroundColor: meta.color + '25' }]}>
                         <View style={[styles.aisleProgFill, {
                           backgroundColor: allDone ? C.lime : meta.color,
-                          width: `${fillPct}%`,
+                          width: `${fill}%`,
                         }]} />
                       </View>
                     </View>
 
-                    <Text style={[styles.aisleCount, { color: allDone ? C.lime : C.text3 }]}>
-                      {done}/{items.length}
-                    </Text>
-                    <Text style={[styles.aisleChevron, { color: C.text3 }]}>{collapsed ? '›' : '⌄'}</Text>
+                    {/* Count + chevron */}
+                    <View style={styles.aisleRight}>
+                      <Text style={[styles.aisleCount, { color: allDone ? C.lime : C.text3 }]}>
+                        {done}/{items.length}
+                      </Text>
+                      <View style={[styles.chevronWrap, { backgroundColor: meta.color + '20' }]}>
+                        <Text style={[styles.chevron, { color: meta.color }]}>{isCol ? '+' : '−'}</Text>
+                      </View>
+                    </View>
                   </TouchableOpacity>
 
                   {/* Items */}
-                  {!collapsed && (
-                    <View style={[styles.itemsWrap, { backgroundColor: C.background }]}>
+                  {!isCol && (
+                    <View style={styles.itemsWrap}>
                       {items.map(renderItem)}
                     </View>
                   )}
@@ -302,42 +320,45 @@ export default function ShopScreen() {
               );
             })}
 
-            {/* Footer */}
+            {/* ─── Footer ────────────────────────────────────────────── */}
             <View style={styles.footer}>
-              <View style={[styles.footerBar, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <Text style={[styles.footerLabel, { color: C.text2 }]}>
-                  {doneCount} of {totalItems} checked
-                </Text>
+              {/* Summary bar */}
+              <View style={[styles.summaryBar, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={styles.summaryLeft}>
+                  <Text style={[styles.summaryCount, { color: C.text }]}>{doneCount}</Text>
+                  <Text style={[styles.summaryOf, { color: C.text3 }]}>  of {total} items checked</Text>
+                </View>
                 {doneCount > 0 && (
                   <TouchableOpacity
-                    style={[styles.clearBtn, { backgroundColor: C.surface2, borderColor: C.border2 }]}
-                    onPress={() => setCheckedItems(new Set())}
+                    style={[styles.clearBtn, { borderColor: C.border2 }]}
+                    onPress={() => setChecked(new Set())}
                   >
                     <Text style={[styles.clearBtnText, { color: C.text3 }]}>Clear all</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
+              {/* Action buttons */}
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1 }]}>
-                  <Text style={styles.actionIcon}>↗</Text>
-                  <Text style={[styles.actionLabel, { color: C.text2 }]}>Share</Text>
+                  <Text style={[styles.actionBtnText, { color: C.text2 }]}>↗  Share</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.lime }]}>
-                  <Text style={styles.actionIcon}>🛒</Text>
-                  <Text style={[styles.actionLabel, { color: C.background }]}>Order Online</Text>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.lime, flex: 2 }]}>
+                  <Text style={[styles.actionBtnText, { color: C.background, fontWeight: '800' }]}>🛒  Order Online</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </>
         )}
 
-        {/* Empty state */}
+        {/* Empty */}
         {!planLoading && !plan && (
           <View style={styles.emptyWrap}>
-            <Text style={styles.emptyIcon}>🛒</Text>
+            <Text style={styles.emptyEmoji}>🛒</Text>
             <Text style={[styles.emptyTitle, { color: C.text }]}>No list yet</Text>
-            <Text style={[styles.emptyDesc, { color: C.text3 }]}>Generate a meal plan to build your shopping list automatically.</Text>
+            <Text style={[styles.emptyDesc, { color: C.text3 }]}>
+              Generate a meal plan to automatically build your weekly shopping list.
+            </Text>
           </View>
         )}
 
@@ -349,86 +370,87 @@ export default function ShopScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { paddingBottom: 120 },
+  container:     { flex: 1 },
+  scroll:        { paddingBottom: 110 },
 
   // Header
-  header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20 },
-  headerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
-  headerLeft: { flex: 1, paddingRight: 12 },
-  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4 },
-  subtitle: { fontSize: 13 },
-  progressRing: { width: 68, height: 68, borderRadius: 34, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  progressPct: { fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  progressPctSuffix: { fontSize: 11, fontWeight: '600' },
-  progressDone: { fontSize: 10, marginTop: 1 },
-  progressTrack: { height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 14 },
-  progressFill: { height: '100%', borderRadius: 3 },
-  savingsChip: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 24, paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-start' },
-  savingsText: { fontSize: 12 },
+  header:        { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 18, gap: 16 },
+  titleRow:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  title:         { fontSize: 30, fontWeight: '800', letterSpacing: -0.8, marginBottom: 4 },
+  subtitle:      { fontSize: 13, lineHeight: 18 },
+
+  // Progress ring
+  ringOuter:     { width: 74, height: 74, borderRadius: 37, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  ringInner:     { width: 60, height: 60, borderRadius: 30, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
+  ringPct:       { fontSize: 18, fontWeight: '800', lineHeight: 20 },
+  ringPctUnit:   { fontSize: 11, fontWeight: '500' },
+  ringDone:      { fontSize: 9, marginTop: 1 },
+
+  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill:  { height: '100%', borderRadius: 3 },
+
+  // Savings card
+  savingsCard:     { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 },
+  savingsIconWrap: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  savingsIconText: { fontSize: 20 },
+  savingsAmount:   { fontSize: 18, fontWeight: '800', marginBottom: 1 },
+  savingsLabel:    { fontSize: 11 },
 
   // Loading
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingBottom: 16 },
+  loadingRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingBottom: 12 },
   loadingText: { fontSize: 13 },
 
-  // Promo banner
-  promoBanner: { marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderRadius: 14, paddingVertical: 11, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  promoDot: { width: 7, height: 7, borderRadius: 4 },
-  promoText: { fontSize: 13 },
+  // Lidl banner
+  lidlBanner:     { marginHorizontal: 20, marginBottom: 16, borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  lidlDot:        { width: 8, height: 8, borderRadius: 4 },
+  lidlBannerText: { fontSize: 13 },
 
-  // Aisle
-  aisleSection: { marginBottom: 2 },
-  aisleHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 16, gap: 12, borderLeftWidth: 3, marginHorizontal: 16, borderRadius: 14, marginBottom: 2 },
-  aisleIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  aisleIcon: { fontSize: 17 },
-  aisleTitleCol: { flex: 1 },
-  aisleLabel: { fontSize: 14, fontWeight: '700', marginBottom: 5 },
-  aisleProgTrack: { height: 3, borderRadius: 2, overflow: 'hidden' },
-  aisleProgFill: { height: '100%', borderRadius: 2 },
-  aisleCount: { fontSize: 12, fontWeight: '600', flexShrink: 0 },
-  aisleChevron: { fontSize: 17, flexShrink: 0, marginLeft: -4 },
+  // Aisle section
+  aisleSection:    { marginBottom: 14 },
+  aisleHeader:     { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, borderRadius: 16, borderWidth: 1, borderLeftWidth: 4, paddingVertical: 14, paddingHorizontal: 14, paddingRight: 12, gap: 12 },
+  aisleIconWrap:   { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  aisleIcon:       { fontSize: 20 },
+  aisleTitleBlock: { flex: 1, gap: 6 },
+  aisleLabel:      { fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
+  aisleProg:       { height: 3, borderRadius: 2, overflow: 'hidden' },
+  aisleProgFill:   { height: '100%', borderRadius: 2 },
+  aisleRight:      { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  aisleCount:      { fontSize: 12, fontWeight: '700' },
+  chevronWrap:     { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  chevron:         { fontSize: 14, fontWeight: '700' },
 
-  // Items list
-  itemsWrap: { paddingHorizontal: 16, paddingBottom: 6, gap: 2 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, gap: 10 },
-
-  // Checkbox
-  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  checkMark: { fontSize: 11, fontWeight: '800', color: '#080808' },
-
-  // Thumbnail
-  thumbWrap: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden', flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
-  thumb: { width: 48, height: 48 },
-  thumbFallback: { width: 52, height: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  thumbEmoji: { fontSize: 22 },
-
-  // Item body
-  itemBody: { flex: 1 },
-  itemName: { fontSize: 13, lineHeight: 17, marginBottom: 3 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  price: { fontSize: 14, fontWeight: '800' },
-  oldPrice: { fontSize: 11, textDecorationLine: 'line-through' },
-
-  // Badges
-  saleBadge: { borderWidth: 1, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, flexShrink: 0 },
-  saleText: { fontSize: 11, fontWeight: '800' },
-  lidlDot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  lidlDotText: { fontSize: 12, fontWeight: '800' },
+  // Items
+  itemsWrap:   { paddingHorizontal: 20, gap: 6, marginTop: 6 },
+  itemRow:     { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 14, gap: 12 },
+  checkBox:    { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  checkMark:   { fontSize: 13, fontWeight: '800', color: '#080808' },
+  thumbWrap:   { width: 58, height: 58, borderRadius: 12, backgroundColor: '#ffffff', overflow: 'hidden', flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+  thumb:       { width: 54, height: 54 },
+  thumbFallback: { width: 58, height: 58, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  thumbEmoji:  { fontSize: 26 },
+  itemBody:    { flex: 1 },
+  itemName:    { fontSize: 14, fontWeight: '500', lineHeight: 19, marginBottom: 4 },
+  priceRow:    { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  price:       { fontSize: 15, fontWeight: '800' },
+  oldPrice:    { fontSize: 12, textDecorationLine: 'line-through' },
+  badge:       { borderWidth: 1, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 9, flexShrink: 0 },
+  badgeText:   { fontSize: 11, fontWeight: '800', letterSpacing: 0.2 },
 
   // Footer
-  footer: { paddingHorizontal: 16, marginTop: 16, gap: 10 },
-  footerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 16 },
-  footerLabel: { fontSize: 13 },
-  clearBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 5, paddingHorizontal: 12 },
+  footer:      { paddingHorizontal: 20, marginTop: 4, gap: 10 },
+  summaryBar:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18 },
+  summaryLeft: { flexDirection: 'row', alignItems: 'baseline' },
+  summaryCount: { fontSize: 20, fontWeight: '800' },
+  summaryOf:   { fontSize: 13 },
+  clearBtn:    { borderWidth: 1, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 14 },
   clearBtnText: { fontSize: 12 },
-  actionRow: { flexDirection: 'row', gap: 8 },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, paddingVertical: 14 },
-  actionIcon: { fontSize: 16 },
-  actionLabel: { fontSize: 14, fontWeight: '700' },
+  actionRow:   { flexDirection: 'row', gap: 10 },
+  actionBtn:   { flex: 1, borderRadius: 16, paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
+  actionBtnText: { fontSize: 14, fontWeight: '700' },
 
-  // Empty state
-  emptyWrap: { alignItems: 'center', paddingHorizontal: 40, paddingTop: 60, gap: 12 },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 20, fontWeight: '700' },
-  emptyDesc: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  // Empty
+  emptyWrap:  { alignItems: 'center', paddingHorizontal: 40, paddingTop: 80, gap: 14 },
+  emptyEmoji: { fontSize: 60 },
+  emptyTitle: { fontSize: 22, fontWeight: '800' },
+  emptyDesc:  { fontSize: 14, textAlign: 'center', lineHeight: 21 },
 });
