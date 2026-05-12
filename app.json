@@ -1,17 +1,25 @@
 {
   "expo": {
-    "name": "mako",
-    "slug": "mako",
+    "name": "Lydo – Meal Planner",
+    "slug": "lydo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/lydo-icon-lime-1024.png",
-    "scheme": "mako",
+    "scheme": "lydo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.lydo.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to scan receipts and food labels.",
+        "NSPhotoLibraryUsageDescription": "Used to import food photos."
+      }
     },
     "android": {
+      "package": "com.lydo.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/lydo-icon-lime-1024.png",
