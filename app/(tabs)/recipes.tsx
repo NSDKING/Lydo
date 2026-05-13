@@ -11,10 +11,12 @@ import {
   TiktokRecipe,
   UserRecipe,
 } from '@/services/api';
-import { useShareIntentContext } from 'expo-share-intent';
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
   ScrollView,
   StyleSheet,
   Text,
@@ -75,19 +77,30 @@ export default function RecipesScreen() {
     }
   };
 
-  // ── Share intent (TikTok → app) ────────────────────────────────────────────
-  const { shareIntent, resetShareIntent } = useShareIntentContext();
+  // ── Clipboard TikTok detection ─────────────────────────────────────────────
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const lastHandledUrl = useRef<string | null>(null);
 
+  const checkClipboard = useCallback(async () => {
+    if (importing) return;
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (!text || text === lastHandledUrl.current) return;
+      if (!text.includes('tiktok.com')) return;
+      lastHandledUrl.current = text;
+      handleImportUrl(text);
+    } catch {}
+  }, [importing]);
+
+  useEffect(() => { checkClipboard(); }, []);
+
   useEffect(() => {
-    const url = shareIntent?.webUrl ?? shareIntent?.text ?? null;
-    if (!url || url === lastHandledUrl.current || importing) return;
-    lastHandledUrl.current = url;
-    resetShareIntent();
-    handleImportUrl(url);
-  }, [shareIntent]);
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') checkClipboard();
+    });
+    return () => sub.remove();
+  }, [checkClipboard]);
 
   // ── TikTok imports (in-memory) ─────────────────────────────────────────────
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
@@ -192,7 +205,7 @@ export default function RecipesScreen() {
           <Text style={[styles.subtitle, { color: colors.text3 }]}>Saved recipes + plan meals</Text>
         </View>
 
-        {/* TikTok share card */}
+        {/* TikTok import card */}
         <View style={[styles.importCard, {
           backgroundColor: importing ? colors.surface2 : colors.surface,
           borderColor: importing ? colors.lime : colors.border,
@@ -204,19 +217,25 @@ export default function RecipesScreen() {
                 {importing ? 'Importing recipe…' : 'Import from TikTok'}
               </Text>
               <Text style={[styles.importDesc, { color: colors.text3 }]}>
-                {importing
-                  ? 'Analysing the video, hang tight'
-                  : 'Open TikTok → Share → Lydo'}
+                {importing ? 'Analysing the video, hang tight' : 'Copy a TikTok link — Lydo auto-detects it'}
               </Text>
             </View>
             {importing && <ActivityIndicator color={colors.lime} />}
           </View>
           {!importing && (
-            <View style={[styles.shareHint, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
-              <Text style={[styles.shareStep, { color: colors.text3 }]}>1. Find a recipe video on TikTok</Text>
-              <Text style={[styles.shareStep, { color: colors.text3 }]}>2. Tap <Text style={{ color: colors.text }}>Share</Text> → <Text style={{ color: colors.lime }}>Lydo</Text></Text>
-              <Text style={[styles.shareStep, { color: colors.text3 }]}>3. Recipe is imported automatically</Text>
-            </View>
+            <>
+              <View style={[styles.shareHint, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
+                <Text style={[styles.shareStep, { color: colors.text3 }]}>1. Open TikTok and find a recipe video</Text>
+                <Text style={[styles.shareStep, { color: colors.text3 }]}>2. Tap <Text style={{ color: colors.text }}>Share</Text> → <Text style={{ color: colors.lime }}>Copy link</Text></Text>
+                <Text style={[styles.shareStep, { color: colors.text3 }]}>3. Come back to Lydo — imports automatically</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.pasteBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
+                onPress={checkClipboard}
+              >
+                <Text style={[styles.pasteBtnText, { color: colors.lime }]}>Paste from clipboard</Text>
+              </TouchableOpacity>
+            </>
           )}
           {importError && <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>}
         </View>
@@ -636,6 +655,8 @@ const styles = StyleSheet.create({
   importDesc: { fontSize: 12 },
   shareHint: { marginTop: 12, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, gap: 6 },
   shareStep: { fontSize: 13, lineHeight: 19 },
+  pasteBtn: { marginTop: 10, borderWidth: 1, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  pasteBtnText: { fontSize: 14, fontWeight: '600' },
   importError: { fontSize: 12, marginTop: 8 },
   section: { paddingHorizontal: 24, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },

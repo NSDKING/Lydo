@@ -10,15 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",
         "NSPhotoLibraryUsageDescription": "Used to import food photos.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "entitlements": {
-        "com.apple.security.application-groups": ["group.com.lydo.app"]
       }
     },
     "android": {
@@ -37,18 +34,6 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-share-intent",
-        {
-          "iosActivationRules": {
-            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
-            "NSExtensionActivationSupportsWebPageWithMaxCount": 1
-          },
-          "androidIntentFilters": [
-            "text/*"
-          ]
-        }
-      ],
       [
         "expo-splash-screen",
         {
