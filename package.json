@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
@@ -25,6 +26,7 @@
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.11",
     "expo-router": "~6.0.23",
+    "expo-share-intent": "^5.1.1",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
@@ -32,6 +34,7 @@
     "expo-web-browser": "~15.0.10",
     "express": "^5.2.1",
     "openai": "^6.37.0",
+    "patch-package": "^8.0.1",
     "playwright": "^1.59.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",

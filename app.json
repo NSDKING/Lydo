@@ -35,6 +35,16 @@
     "plugins": [
       "expo-router",
       [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1
+          },
+          "androidIntentFilters": ["text/*"]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/icon.png",

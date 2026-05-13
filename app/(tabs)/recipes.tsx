@@ -11,13 +11,13 @@ import {
   TiktokRecipe,
   UserRecipe,
 } from '@/services/api';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useShareIntentContext } from 'expo-share-intent';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -75,11 +75,22 @@ export default function RecipesScreen() {
     }
   };
 
-  // ── TikTok imports (in-memory) ─────────────────────────────────────────────
-  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
-  const [tiktokUrl, setTiktokUrl] = useState('');
+  // ── Share intent (TikTok → app) ────────────────────────────────────────────
+  const { shareIntent, resetShareIntent } = useShareIntentContext();
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const lastHandledUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    const url = shareIntent?.webUrl ?? shareIntent?.text ?? null;
+    if (!url || url === lastHandledUrl.current || importing) return;
+    lastHandledUrl.current = url;
+    resetShareIntent();
+    handleImportUrl(url);
+  }, [shareIntent]);
+
+  // ── TikTok imports (in-memory) ─────────────────────────────────────────────
+  const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [importedRecipes, setImportedRecipes] = useState<TiktokRecipe[]>([]);
   const [expandedRecipe, setExpandedRecipe] = useState<number | null>(null);
   const [importStates, setImportStates] = useState<ImportState[]>([]);
@@ -116,16 +127,13 @@ export default function RecipesScreen() {
     });
   };
 
-  const handleImport = async () => {
-    const url = tiktokUrl.trim();
-    if (!url) return;
+  const handleImportUrl = async (url: string) => {
     setImporting(true);
     setImportError(null);
     try {
       const recipe = await analyzeTiktok(url);
       setImportedRecipes(prev => [recipe, ...prev]);
       setImportStates(prev => [defaultImportState(), ...prev]);
-      setTiktokUrl('');
       setExpandedRecipe(0);
     } catch (err) {
       setImportError((err as Error).message);
@@ -184,37 +192,32 @@ export default function RecipesScreen() {
           <Text style={[styles.subtitle, { color: colors.text3 }]}>Saved recipes + plan meals</Text>
         </View>
 
-        {/* TikTok import */}
-        <View style={[styles.importCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {/* TikTok share card */}
+        <View style={[styles.importCard, {
+          backgroundColor: importing ? colors.surface2 : colors.surface,
+          borderColor: importing ? colors.lime : colors.border,
+        }]}>
           <View style={styles.importHeader}>
-            <Text style={styles.importIcon}>📱</Text>
+            <Text style={styles.importIcon}>{importing ? '⏳' : '📱'}</Text>
             <View style={styles.importHeaderText}>
-              <Text style={[styles.importTitle, { color: colors.text }]}>Import from TikTok</Text>
-              <Text style={[styles.importDesc, { color: colors.text3 }]}>Paste a recipe video URL</Text>
+              <Text style={[styles.importTitle, { color: colors.text }]}>
+                {importing ? 'Importing recipe…' : 'Import from TikTok'}
+              </Text>
+              <Text style={[styles.importDesc, { color: colors.text3 }]}>
+                {importing
+                  ? 'Analysing the video, hang tight'
+                  : 'Open TikTok → Share → Lydo'}
+              </Text>
             </View>
+            {importing && <ActivityIndicator color={colors.lime} />}
           </View>
-          <View style={styles.importRow}>
-            <TextInput
-              style={[styles.urlInput, { backgroundColor: colors.surface2, borderColor: colors.border2, color: colors.text }]}
-              placeholder="https://www.tiktok.com/@..."
-              placeholderTextColor={colors.text3}
-              value={tiktokUrl}
-              onChangeText={setTiktokUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!importing}
-            />
-            <TouchableOpacity
-              style={[styles.importBtn, { backgroundColor: importing ? colors.surface3 : colors.lime }]}
-              onPress={handleImport}
-              disabled={importing || !tiktokUrl.trim()}
-            >
-              {importing
-                ? <ActivityIndicator color={colors.text3} size="small" />
-                : <Text style={[styles.importBtnText, { color: colors.background }]}>Go</Text>
-              }
-            </TouchableOpacity>
-          </View>
+          {!importing && (
+            <View style={[styles.shareHint, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
+              <Text style={[styles.shareStep, { color: colors.text3 }]}>1. Find a recipe video on TikTok</Text>
+              <Text style={[styles.shareStep, { color: colors.text3 }]}>2. Tap <Text style={{ color: colors.text }}>Share</Text> → <Text style={{ color: colors.lime }}>Lydo</Text></Text>
+              <Text style={[styles.shareStep, { color: colors.text3 }]}>3. Recipe is imported automatically</Text>
+            </View>
+          )}
           {importError && <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>}
         </View>
 
@@ -631,10 +634,8 @@ const styles = StyleSheet.create({
   importHeaderText: { flex: 1 },
   importTitle: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   importDesc: { fontSize: 12 },
-  importRow: { flexDirection: 'row', gap: 8 },
-  urlInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, fontSize: 13 },
-  importBtn: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', minWidth: 52 },
-  importBtnText: { fontSize: 14, fontWeight: '700' },
+  shareHint: { marginTop: 12, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, gap: 6 },
+  shareStep: { fontSize: 13, lineHeight: 19 },
   importError: { fontSize: 12, marginTop: 8 },
   section: { paddingHorizontal: 24, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
