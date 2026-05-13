@@ -40,14 +40,20 @@ function getAisle(name: string) {
   return AISLE_OTHER.label;
 }
 
+// Strip leading quantity/unit (e.g. "200g", "2 tbsp", "1 kg") before matching.
+function stripQty(s: string) {
+  return s.replace(/^\d+[\.,]?\d*\s*(g|kg|ml|cl|l|x|pc|pcs|tbsp|tsp|cup|oz|lb|piece|tranches?|filets?)?\s*/i, '').trim();
+}
+
 // Returns the catalog entry with the most keyword overlap, preferring entries
-// that have an image_url. Falls back to any partial match if needed.
+// that have an image_url.
 function matchCatalog(name: string, catalog: LidlPromoDetail[]): LidlPromoDetail | undefined {
-  const words = norm(name)
-    .replace(/lidl/g, '')
+  const cleaned = stripQty(name);
+  const words = norm(cleaned)
+    .replace(/\blidl\b/g, '')
     .trim()
     .split(/\s+/)
-    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+    .filter(w => w.length >= 2 && !STOPWORDS.has(w));
 
   if (!words.length) return undefined;
 
@@ -81,6 +87,7 @@ const AISLE_FALLBACK: Record<string, string> = {
 interface GroceryItem {
   id: string; name: string; isLidl: boolean; aisle: string;
   price?: string; old_price?: string; discount_percent?: number; image_url?: string;
+  lidlDeal?: boolean; // non-Lidl ingredient that matched a current catalog promo
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -117,11 +124,17 @@ export default function ShopScreen() {
           items.push({ id: `l-${k}`, name: m?.title ?? p, isLidl: true, aisle: getAisle(p), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url });
         }
         for (const ing of meal.ingredients) {
-          const stripped = ing.replace(/^\d+[gmlkgL\s]+/i, '').trim();
+          const stripped = stripQty(ing);
           const k = stripped.toLowerCase();
           if ([...lSeen].some(l => l.includes(k) || k.includes(l)) || oSeen.has(k)) continue;
           oSeen.add(k);
-          items.push({ id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing) });
+          const m = matchCatalog(stripped, catalog);
+          items.push({
+            id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing),
+            price: m?.price, old_price: m?.old_price,
+            discount_percent: m?.discount_percent, image_url: m?.image_url,
+            lidlDeal: !!m,
+          });
         }
       }
     }
@@ -136,7 +149,7 @@ export default function ShopScreen() {
   const doneCount  = allItems.filter(i => checked.has(i.id)).length;
   const total      = allItems.length;
   const pct        = total ? Math.round((doneCount / total) * 100) : 0;
-  const lidlCount  = allItems.filter(i => i.isLidl).length;
+  const lidlCount  = allItems.filter(i => i.isLidl || i.lidlDeal).length;
   const savings    = useMemo(() => allItems.reduce((s, i) => {
     if (!i.price || !i.old_price) return s;
     const c = parseFloat(i.price), o = parseFloat(i.old_price);
@@ -220,6 +233,10 @@ export default function ShopScreen() {
         ) : item.isLidl ? (
           <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
             <Text style={[styles.badgeText, { color: C.lime }]}>LIDL</Text>
+          </View>
+        ) : item.lidlDeal ? (
+          <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
+            <Text style={[styles.badgeText, { color: C.lime }]}>🛒</Text>
           </View>
         ) : null}
       </TouchableOpacity>
