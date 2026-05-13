@@ -8,6 +8,7 @@ export interface Meal {
   carbs_g: number;
   fat_g: number;
   ingredients: string[];
+  steps?: string[];
   lidl_products_used: string[];
 }
 

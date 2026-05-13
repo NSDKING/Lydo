@@ -308,6 +308,20 @@ export default function PlanScreen() {
                   ))}
                 </View>
 
+                {expanded && meal.steps && meal.steps.length > 0 && (
+                  <View style={[styles.stepsBox, { borderTopColor: colors.border }]}>
+                    <Text style={[styles.stepsLabel, { color: colors.text3 }]}>RECIPE</Text>
+                    {meal.steps.map((step, si) => (
+                      <View key={si} style={styles.stepRow}>
+                        <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
+                          <Text style={[styles.stepNumText, { color: colors.lime }]}>{si + 1}</Text>
+                        </View>
+                        <Text style={[styles.stepText, { color: colors.text2 }]}>{step}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 {expanded && (
                   <View style={styles.actionRow}>
                     <TouchableOpacity
@@ -664,6 +678,12 @@ const styles = StyleSheet.create({
   macroBlockLast: { borderRightWidth: 0 },
   macroBlockVal: { fontSize: 13, fontWeight: '700' },
   macroBlockLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.08 },
+  stepsBox: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  stepsLabel: { fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 10 },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+  stepNum: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  stepNumText: { fontSize: 11, fontWeight: '700' },
+  stepText: { flex: 1, fontSize: 13, lineHeight: 18 },
   actionRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   actionBtn: { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 10, alignItems: 'center', gap: 4 },
   actionBtnIcon: { fontSize: 16 },
