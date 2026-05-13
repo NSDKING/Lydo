@@ -1,13 +1,22 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Meal, analyzeTiktok, swapMeal as apiSwapMeal } from '@/services/api';
+import {
+  AdaptedIngredient,
+  Meal,
+  UserRecipe,
+  adaptRecipeWithLidl,
+  fetchUserRecipes,
+  saveUserRecipe,
+  swapMeal as apiSwapMeal,
+} from '@/services/api';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -25,19 +34,25 @@ const DAYS = [
   { key: 'Saturday',  short: 'Sat' },
   { key: 'Sunday',    short: 'Sun' },
 ];
-
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-type SwapPhase = 'choose' | 'ai' | 'tiktok' | 'loading' | 'preview';
+type SwapPhase = 'choose' | 'ai' | 'my-recipes' | 'loading' | 'preview';
+
 interface SwapState {
   day: string;
   idx: number;
   phase: SwapPhase;
   preferences: string;
-  tiktokUrl: string;
   candidate: Meal | null;
   error: string | null;
+  userRecipes: UserRecipe[];
+  loadingRecipes: boolean;
+  cheapening: boolean;
+  cheapenError: string | null;
+  adaptedIngredients: AdaptedIngredient[] | null;
+  saveToRecipes: boolean;
+  savedOk: boolean;
 }
 
 export default function PlanScreen() {
@@ -61,17 +76,12 @@ export default function PlanScreen() {
   const [swapState, setSwapState] = useState<SwapState | null>(null);
 
   const dayPlan = getEffectiveDayPlan(selectedDay);
-  const logged = loggedMeals[selectedDay] ?? new Set<number>();
-  const locked = lockedMeals[selectedDay] ?? new Set<number>();
+  const logged  = loggedMeals[selectedDay]  ?? new Set<number>();
+  const locked  = lockedMeals[selectedDay]  ?? new Set<number>();
+  const barPercent = dayPlan ? Math.min(100, Math.round((dayPlan.total_calories / 2000) * 100)) : 0;
 
-  const barPercent = dayPlan
-    ? Math.min(100, Math.round((dayPlan.total_calories / 2000) * 100))
-    : 0;
-
-  const getMealAccent = (idx: number) =>
-    [colors.orange, colors.lime, colors.blue, '#c47fff'][idx % 4];
-  const getMealAccentDim = (idx: number) =>
-    [`${colors.orange}22`, `${colors.lime}22`, `${colors.blue}22`, 'rgba(196,127,255,0.13)'][idx % 4];
+  const getMealAccent    = (idx: number) => [colors.orange, colors.lime, colors.blue, '#c47fff'][idx % 4];
+  const getMealAccentDim = (idx: number) => [`${colors.orange}22`, `${colors.lime}22`, `${colors.blue}22`, 'rgba(196,127,255,0.13)'][idx % 4];
 
   const commitEdit = (idx: number) => {
     if (editDraft.trim()) editMealName(selectedDay, idx, editDraft.trim());
@@ -79,55 +89,82 @@ export default function PlanScreen() {
     setEditDraft('');
   };
 
-  const openSwapModal = (day: string, idx: number) => {
-    setSwapState({ day, idx, phase: 'choose', preferences: '', tiktokUrl: '', candidate: null, error: null });
-  };
+  const openSwapModal = (day: string, idx: number) =>
+    setSwapState({ day, idx, phase: 'choose', preferences: '', candidate: null, error: null,
+      userRecipes: [], loadingRecipes: false, cheapening: false, cheapenError: null,
+      adaptedIngredients: null, saveToRecipes: false, savedOk: false });
+
+  const patchSwap = (patch: Partial<SwapState>) =>
+    setSwapState(s => s ? { ...s, ...patch } : null);
 
   const runAISwap = async () => {
     if (!swapState) return;
     const dp = getEffectiveDayPlan(swapState.day);
     if (!dp) return;
-    setSwapState(s => s ? { ...s, phase: 'loading', error: null } : null);
+    patchSwap({ phase: 'loading', error: null });
     try {
       const meal = await apiSwapMeal(dp, swapState.idx, swapState.preferences || undefined);
-      setSwapState(s => s ? { ...s, phase: 'preview', candidate: meal } : null);
+      patchSwap({ phase: 'preview', candidate: meal, adaptedIngredients: null });
     } catch (e) {
-      setSwapState(s => s ? { ...s, phase: 'ai', error: (e as Error).message } : null);
+      patchSwap({ phase: 'ai', error: (e as Error).message });
     }
   };
 
-  const runTikTokSwap = async () => {
-    if (!swapState) return;
-    setSwapState(s => s ? { ...s, phase: 'loading', error: null } : null);
+  const loadMyRecipes = async () => {
+    patchSwap({ phase: 'my-recipes', loadingRecipes: true, error: null, userRecipes: [] });
     try {
-      const recipe = await analyzeTiktok(swapState.tiktokUrl.trim());
-      const meal: Meal = {
-        name: recipe.title,
-        calories: recipe.macros.calories,
-        protein_g: recipe.macros.protein_g,
-        carbs_g: recipe.macros.carbs_g,
-        fat_g: recipe.macros.fat_g,
-        ingredients: recipe.ingredients,
-        lidl_products_used: [],
-      };
-      setSwapState(s => s ? { ...s, phase: 'preview', candidate: meal } : null);
+      const recipes = await fetchUserRecipes();
+      patchSwap({ loadingRecipes: false, userRecipes: recipes });
     } catch (e) {
-      setSwapState(s => s ? { ...s, phase: 'tiktok', error: (e as Error).message } : null);
+      patchSwap({ loadingRecipes: false, error: (e as Error).message });
     }
+  };
+
+  const selectSavedRecipe = (r: UserRecipe) => {
+    const meal: Meal = {
+      name: r.name, calories: r.calories, protein_g: r.protein_g,
+      carbs_g: r.carbs_g, fat_g: r.fat_g,
+      ingredients: r.ingredients, lidl_products_used: r.lidl_products_used,
+    };
+    patchSwap({ phase: 'preview', candidate: meal, adaptedIngredients: null });
+  };
+
+  const runCheapen = async () => {
+    if (!swapState?.candidate) return;
+    patchSwap({ cheapening: true, cheapenError: null });
+    try {
+      const result = await adaptRecipeWithLidl(swapState.candidate.name, swapState.candidate.ingredients);
+      patchSwap({ cheapening: false, adaptedIngredients: result.adaptedIngredients });
+    } catch (e) {
+      patchSwap({ cheapening: false, cheapenError: (e as Error).message });
+    }
+  };
+
+  const applyCheapenToCandidate = () => {
+    if (!swapState?.candidate || !swapState.adaptedIngredients) return;
+    const lidlProducts = swapState.adaptedIngredients
+      .filter(a => a.lidlProduct)
+      .map(a => a.lidlProduct as string);
+    patchSwap({ candidate: { ...swapState.candidate, lidl_products_used: lidlProducts } });
   };
 
   const confirmSwap = async () => {
     if (!swapState?.candidate) return;
     applyMealOverride(swapState.day, swapState.idx, swapState.candidate);
-    setSwapState(null);
     persistCurrentPlan().catch(console.warn);
+    if (swapState.saveToRecipes) {
+      try {
+        await saveUserRecipe(swapState.candidate);
+        patchSwap({ savedOk: true });
+      } catch { /* non-fatal */ }
+    }
+    setSwapState(null);
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
@@ -136,18 +173,14 @@ export default function PlanScreen() {
             </View>
             <TouchableOpacity
               style={[styles.regenBtn, { borderColor: colors.border2, backgroundColor: colors.surface2 }]}
-              onPress={refresh}
-              disabled={isLoading}
+              onPress={refresh} disabled={isLoading}
             >
               <Text style={[styles.regenIcon, { color: colors.text2 }]}>⟳</Text>
-              <Text style={[styles.regenText, { color: colors.text2 }]}>
-                {isLoading ? 'Generating…' : 'Regenerate'}
-              </Text>
+              <Text style={[styles.regenText, { color: colors.text2 }]}>{isLoading ? 'Generating…' : 'Regenerate'}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Budget strip */}
         <View style={[styles.budgetStrip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View>
             <Text style={[styles.budgetSublabel, { color: colors.text3 }]}>Daily Budget</Text>
@@ -158,8 +191,8 @@ export default function PlanScreen() {
           <View style={styles.budgetMacros}>
             {dayPlan && [
               { val: `${dayPlan.protein_g}g`, label: 'PRO', color: colors.lime },
-              { val: `${dayPlan.carbs_g}g`, label: 'CARB', color: colors.blue },
-              { val: `${dayPlan.fat_g}g`, label: 'FAT', color: colors.orange },
+              { val: `${dayPlan.carbs_g}g`,   label: 'CARB', color: colors.blue },
+              { val: `${dayPlan.fat_g}g`,     label: 'FAT',  color: colors.orange },
             ].map(m => (
               <View key={m.label} style={styles.macroPill}>
                 <Text style={[styles.macroVal, { color: m.color }]}>{m.val}</Text>
@@ -169,19 +202,14 @@ export default function PlanScreen() {
           </View>
         </View>
 
-        {/* Day tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={styles.dayScroll} contentContainerStyle={styles.dayScrollContent}>
           {DAYS.map(day => {
             const active = selectedDay === day.key;
             return (
-              <TouchableOpacity
-                key={day.key}
-                style={[
-                  styles.dayChip,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                  active && { borderColor: colors.lime, backgroundColor: colors.limeDim },
-                ]}
+              <TouchableOpacity key={day.key}
+                style={[styles.dayChip, { backgroundColor: colors.surface, borderColor: colors.border },
+                  active && { borderColor: colors.lime, backgroundColor: colors.limeDim }]}
                 onPress={() => { setSelectedDay(day.key); setExpandedMeal(null); setEditingIdx(null); }}
               >
                 <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{day.short}</Text>
@@ -191,14 +219,11 @@ export default function PlanScreen() {
           })}
         </ScrollView>
 
-        {/* Day summary bar */}
         <View style={[styles.daySummary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View>
             <Text style={[styles.dsLabel, { color: colors.text3 }]}>Day Total</Text>
             <Text style={[styles.dsVal, { color: colors.text }]}>
-              <Text style={{ color: colors.lime }}>
-                {dayPlan ? dayPlan.total_calories.toLocaleString() : '—'}
-              </Text>{' kcal'}
+              <Text style={{ color: colors.lime }}>{dayPlan ? dayPlan.total_calories.toLocaleString() : '—'}</Text>{' kcal'}
             </Text>
           </View>
           <View style={styles.dsBarWrap}>
@@ -212,7 +237,6 @@ export default function PlanScreen() {
           </View>
         </View>
 
-        {/* Meals */}
         <View style={styles.mealsSection}>
           {isLoading && (
             <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -220,35 +244,27 @@ export default function PlanScreen() {
               <Text style={[styles.loadingText, { color: colors.text3 }]}>Generating your meal plan…</Text>
             </View>
           )}
-
           {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
 
           {!isLoading && dayPlan?.meals.map((meal, idx) => {
-            const expanded = expandedMeal === idx;
-            const isLogged = logged.has(idx);
-            const isLocked = locked.has(idx);
+            const expanded  = expandedMeal === idx;
+            const isLogged  = logged.has(idx);
+            const isLocked  = locked.has(idx);
             const isSwapping = swappingMeal?.day === selectedDay && swappingMeal?.idx === idx;
-            const isEditing = editingIdx === idx;
-            const accent = getMealAccent(idx);
+            const isEditing  = editingIdx === idx;
+            const accent    = getMealAccent(idx);
             const accentDim = getMealAccentDim(idx);
-            const mealType = MEAL_TYPES[idx] ?? 'Meal';
-            const isLidl = meal.lidl_products_used.length > 0;
+            const mealType  = MEAL_TYPES[idx] ?? 'Meal';
+            const isLidl    = meal.lidl_products_used.length > 0;
 
             return (
-              <TouchableOpacity
-                key={idx}
-                activeOpacity={0.88}
-                style={[
-                  styles.mealCard,
-                  {
-                    backgroundColor: expanded ? colors.surface2 : colors.surface,
+              <TouchableOpacity key={idx} activeOpacity={0.88}
+                style={[styles.mealCard,
+                  { backgroundColor: expanded ? colors.surface2 : colors.surface,
                     borderColor: expanded ? accent : colors.border,
-                    opacity: isSwapping ? 0.5 : 1,
-                  },
-                ]}
+                    opacity: isSwapping ? 0.5 : 1 }]}
                 onPress={() => { setExpandedMeal(expanded ? null : idx); setEditingIdx(null); }}
               >
-                {/* Card header */}
                 <View style={styles.mealCardHeader}>
                   <View style={[styles.mealTypePill, { backgroundColor: accentDim }]}>
                     <Text style={[styles.mealTypePillText, { color: accent }]}>{mealType}</Text>
@@ -260,23 +276,16 @@ export default function PlanScreen() {
                   {isSwapping && <ActivityIndicator size="small" color={accent} />}
                 </View>
 
-                {/* Meal name */}
                 {isEditing ? (
                   <TextInput
                     style={[styles.mealNameInput, { color: colors.text, borderColor: accent }]}
-                    value={editDraft}
-                    onChangeText={setEditDraft}
-                    onBlur={() => commitEdit(idx)}
-                    onSubmitEditing={() => commitEdit(idx)}
-                    autoFocus
+                    value={editDraft} onChangeText={setEditDraft}
+                    onBlur={() => commitEdit(idx)} onSubmitEditing={() => commitEdit(idx)} autoFocus
                   />
                 ) : (
-                  <Text style={[styles.mealName, { color: isLogged ? colors.text2 : colors.text }]}>
-                    {meal.name}
-                  </Text>
+                  <Text style={[styles.mealName, { color: isLogged ? colors.text2 : colors.text }]}>{meal.name}</Text>
                 )}
 
-                {/* Source badges */}
                 <View style={styles.mealMeta}>
                   {isLidl && (
                     <View style={[styles.lidlTag, { backgroundColor: colors.limeDim2, borderColor: 'rgba(181,242,61,0.2)' }]}>
@@ -285,13 +294,12 @@ export default function PlanScreen() {
                   )}
                 </View>
 
-                {/* Macro row */}
                 <View style={[styles.mealMacrosRow, { borderTopColor: colors.border }]}>
                   {[
                     { val: `${meal.protein_g}g`, label: 'Protein', color: colors.lime },
-                    { val: `${meal.carbs_g}g`, label: 'Carbs', color: colors.blue },
-                    { val: `${meal.fat_g}g`, label: 'Fat', color: colors.orange },
-                    { val: `${meal.calories}`, label: 'kcal', color: colors.text },
+                    { val: `${meal.carbs_g}g`,   label: 'Carbs',   color: colors.blue },
+                    { val: `${meal.fat_g}g`,     label: 'Fat',     color: colors.orange },
+                    { val: `${meal.calories}`,   label: 'kcal',    color: colors.text },
                   ].map((m, i, arr) => (
                     <View key={i} style={[styles.macroBlock, { borderColor: colors.border }, i === arr.length - 1 && styles.macroBlockLast]}>
                       <Text style={[styles.macroBlockVal, { color: m.color }]}>{m.val}</Text>
@@ -300,7 +308,6 @@ export default function PlanScreen() {
                   ))}
                 </View>
 
-                {/* Action buttons */}
                 {expanded && (
                   <View style={styles.actionRow}>
                     <TouchableOpacity
@@ -308,11 +315,8 @@ export default function PlanScreen() {
                       onPress={(e) => { e.stopPropagation?.(); lockMeal(selectedDay, idx); }}
                     >
                       <Text style={styles.actionBtnIcon}>{isLocked ? '🔒' : '🔓'}</Text>
-                      <Text style={[styles.actionBtnLabel, { color: isLocked ? colors.lime : colors.text3 }]}>
-                        {isLocked ? 'Locked' : 'Lock'}
-                      </Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLocked ? colors.lime : colors.text3 }]}>{isLocked ? 'Locked' : 'Lock'}</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border }]}
                       onPress={(e) => { e.stopPropagation?.(); setEditDraft(meal.name); setEditingIdx(idx); }}
@@ -320,7 +324,6 @@ export default function PlanScreen() {
                       <Text style={styles.actionBtnIcon}>✏️</Text>
                       <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Edit</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border, opacity: isLocked ? 0.4 : 1 }]}
                       onPress={(e) => { e.stopPropagation?.(); if (!isLocked) openSwapModal(selectedDay, idx); }}
@@ -329,15 +332,12 @@ export default function PlanScreen() {
                       <Text style={styles.actionBtnIcon}>🔁</Text>
                       <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Swap</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: isLogged ? colors.lime : colors.border, backgroundColor: isLogged ? colors.limeDim : 'transparent' }]}
                       onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
                     >
                       <Text style={styles.actionBtnIcon}>{isLogged ? '✅' : '☑️'}</Text>
-                      <Text style={[styles.actionBtnLabel, { color: isLogged ? colors.lime : colors.text3 }]}>
-                        {isLogged ? 'Logged' : 'Log'}
-                      </Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLogged ? colors.lime : colors.text3 }]}>{isLogged ? 'Logged' : 'Log'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -356,23 +356,20 @@ export default function PlanScreen() {
         </View>
       </ScrollView>
 
-      {/* Swap modal */}
-      <Modal
-        visible={!!swapState}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSwapState(null)}
-      >
+      <Modal visible={!!swapState} animationType="slide" transparent onRequestClose={() => setSwapState(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
             {swapState && (
               <SwapModal
                 state={swapState}
                 colors={colors}
-                onChange={setSwapState}
                 onAIGenerate={runAISwap}
-                onTikTokAnalyze={runTikTokSwap}
+                onLoadMyRecipes={loadMyRecipes}
+                onSelectRecipe={selectSavedRecipe}
+                onCheapen={runCheapen}
+                onApplyCheapen={applyCheapenToCandidate}
                 onConfirm={confirmSwap}
+                onPatch={patchSwap}
                 onClose={() => setSwapState(null)}
               />
             )}
@@ -388,15 +385,18 @@ export default function PlanScreen() {
 interface SwapModalProps {
   state: SwapState;
   colors: any;
-  onChange: (s: SwapState) => void;
   onAIGenerate: () => void;
-  onTikTokAnalyze: () => void;
+  onLoadMyRecipes: () => void;
+  onSelectRecipe: (r: UserRecipe) => void;
+  onCheapen: () => void;
+  onApplyCheapen: () => void;
   onConfirm: () => void;
+  onPatch: (p: Partial<SwapState>) => void;
   onClose: () => void;
 }
 
-function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onConfirm, onClose }: SwapModalProps) {
-  const set = (patch: Partial<SwapState>) => onChange({ ...state, ...patch });
+function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecipe, onCheapen, onApplyCheapen, onConfirm, onPatch, onClose }: SwapModalProps) {
+  const set = (p: Partial<SwapState>) => onPatch(p);
 
   return (
     <>
@@ -409,7 +409,8 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {/* ── Phase: choose ── */}
+
+        {/* ── choose ── */}
         {state.phase === 'choose' && (
           <View style={styles.chooseGrid}>
             <TouchableOpacity
@@ -418,20 +419,20 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
             >
               <Text style={styles.chooseIcon}>🤖</Text>
               <Text style={[styles.chooseTitle, { color: colors.text }]}>AI Generate</Text>
-              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Let AI suggest a new meal with your preferences</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Let AI suggest a new meal, optionally with your preferences</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.chooseCard, { borderColor: colors.blue, backgroundColor: `${colors.blue}10` }]}
-              onPress={() => set({ phase: 'tiktok' })}
+              onPress={onLoadMyRecipes}
             >
-              <Text style={styles.chooseIcon}>🎵</Text>
-              <Text style={[styles.chooseTitle, { color: colors.text }]}>From TikTok</Text>
-              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Paste a TikTok recipe video URL</Text>
+              <Text style={styles.chooseIcon}>📖</Text>
+              <Text style={[styles.chooseTitle, { color: colors.text }]}>My Recipes</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Pick from your saved personal recipes</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Phase: ai input ── */}
+        {/* ── ai input ── */}
         {state.phase === 'ai' && (
           <View style={styles.inputPhase}>
             <Text style={[styles.inputLabel, { color: colors.text3 }]}>PREFERENCES (OPTIONAL)</Text>
@@ -441,8 +442,7 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
               placeholderTextColor={colors.text3}
               value={state.preferences}
               onChangeText={v => set({ preferences: v })}
-              multiline
-              numberOfLines={3}
+              multiline numberOfLines={3}
             />
             {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onAIGenerate}>
@@ -454,34 +454,48 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
           </View>
         )}
 
-        {/* ── Phase: tiktok input ── */}
-        {state.phase === 'tiktok' && (
-          <View style={styles.inputPhase}>
-            <Text style={[styles.inputLabel, { color: colors.text3 }]}>TIKTOK VIDEO URL</Text>
-            <TextInput
-              style={[styles.urlInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
-              placeholder="https://www.tiktok.com/@..."
-              placeholderTextColor={colors.text3}
-              value={state.tiktokUrl}
-              onChangeText={v => set({ tiktokUrl: v })}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
+        {/* ── my recipes ── */}
+        {state.phase === 'my-recipes' && (
+          <View>
+            {state.loadingRecipes && (
+              <View style={styles.loadingPhase}>
+                <ActivityIndicator color={colors.lime} size="large" />
+                <Text style={[styles.loadingMsg, { color: colors.text3 }]}>Loading your recipes…</Text>
+              </View>
+            )}
+            {!state.loadingRecipes && state.userRecipes.length === 0 && (
+              <View style={styles.emptyRecipes}>
+                <Text style={styles.emptyIcon}>📭</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved recipes yet</Text>
+                <Text style={[styles.emptyDesc, { color: colors.text3 }]}>Save a meal from the Today tab or after generating an AI swap</Text>
+              </View>
+            )}
+            {!state.loadingRecipes && state.userRecipes.map(r => (
+              <TouchableOpacity
+                key={r.id}
+                style={[styles.savedRecipeRow, { backgroundColor: colors.surface2, borderColor: colors.border }]}
+                onPress={() => onSelectRecipe(r)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.savedRecipeName, { color: colors.text }]}>{r.name}</Text>
+                  <Text style={[styles.savedRecipeMeta, { color: colors.text3 }]}>
+                    {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · F {r.fat_g}g
+                  </Text>
+                  {r.lidl_products_used.length > 0 && (
+                    <Text style={[styles.savedRecipeLidl, { color: colors.lime }]}>🛒 Lidl products included</Text>
+                  )}
+                </View>
+                <Text style={[styles.savedRecipeArrow, { color: colors.text3 }]}>›</Text>
+              </TouchableOpacity>
+            ))}
             {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: colors.blue, opacity: state.tiktokUrl.trim() ? 1 : 0.4 }]}
-              onPress={onTikTokAnalyze}
-              disabled={!state.tiktokUrl.trim()}
-            >
-              <Text style={[styles.primaryBtnText, { color: '#fff' }]}>Analyze Recipe</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.backBtn} onPress={() => set({ phase: 'choose', error: null })}>
+            <TouchableOpacity style={[styles.backBtn, { marginTop: 12 }]} onPress={() => set({ phase: 'choose', error: null })}>
               <Text style={[styles.backBtnText, { color: colors.text3 }]}>← Back</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Phase: loading ── */}
+        {/* ── loading ── */}
         {state.phase === 'loading' && (
           <View style={styles.loadingPhase}>
             <ActivityIndicator color={colors.lime} size="large" />
@@ -489,18 +503,20 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
           </View>
         )}
 
-        {/* ── Phase: preview ── */}
+        {/* ── preview ── */}
         {state.phase === 'preview' && state.candidate && (
           <View style={styles.previewPhase}>
-            <Text style={[styles.previewLabel, { color: colors.text3 }]}>NEW MEAL PREVIEW</Text>
+            <Text style={[styles.inputLabel, { color: colors.text3 }]}>NEW MEAL PREVIEW</Text>
+
+            {/* Candidate card */}
             <View style={[styles.previewCard, { backgroundColor: colors.surface2, borderColor: colors.lime }]}>
               <Text style={[styles.previewName, { color: colors.text }]}>{state.candidate.name}</Text>
               <View style={styles.previewMacros}>
                 {[
                   { v: `${state.candidate.protein_g}g`, l: 'Protein', c: colors.lime },
-                  { v: `${state.candidate.carbs_g}g`, l: 'Carbs', c: colors.blue },
-                  { v: `${state.candidate.fat_g}g`, l: 'Fat', c: colors.orange },
-                  { v: `${state.candidate.calories}`, l: 'kcal', c: colors.text },
+                  { v: `${state.candidate.carbs_g}g`,   l: 'Carbs',   c: colors.blue },
+                  { v: `${state.candidate.fat_g}g`,     l: 'Fat',     c: colors.orange },
+                  { v: `${state.candidate.calories}`,   l: 'kcal',    c: colors.text },
                 ].map(m => (
                   <View key={m.l} style={styles.previewMacroItem}>
                     <Text style={[styles.previewMacroVal, { color: m.c }]}>{m.v}</Text>
@@ -510,12 +526,72 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
               </View>
               {state.candidate.ingredients.length > 0 && (
                 <View style={styles.previewIngredients}>
-                  <Text style={[styles.previewIngrTitle, { color: colors.text3 }]}>INGREDIENTS</Text>
+                  <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 6 }]}>INGREDIENTS</Text>
                   {state.candidate.ingredients.map((ing, i) => (
                     <Text key={i} style={[styles.previewIngr, { color: colors.text2 }]}>• {ing}</Text>
                   ))}
                 </View>
               )}
+              {state.candidate.lidl_products_used.length > 0 && (
+                <View style={[styles.lidlApplied, { backgroundColor: `${colors.lime}12`, borderColor: `${colors.lime}30` }]}>
+                  <Text style={[styles.lidlAppliedTitle, { color: colors.lime }]}>🛒 Lidl products applied</Text>
+                  {state.candidate.lidl_products_used.map((p, i) => (
+                    <Text key={i} style={[styles.previewIngr, { color: colors.lime }]}>• {p}</Text>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Cheapen with Lidl */}
+            {!state.adaptedIngredients && (
+              <TouchableOpacity
+                style={[styles.cheapenBtn, { borderColor: colors.lime, backgroundColor: `${colors.lime}0f` }]}
+                onPress={onCheapen}
+                disabled={state.cheapening}
+              >
+                {state.cheapening
+                  ? <ActivityIndicator color={colors.lime} size="small" />
+                  : <Text style={styles.cheapenIcon}>🛒</Text>
+                }
+                <Text style={[styles.cheapenText, { color: colors.lime }]}>
+                  {state.cheapening ? 'Finding Lidl substitutes…' : 'Cheapen with Lidl'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {state.cheapenError && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.cheapenError}</Text>}
+
+            {/* Substitution results */}
+            {state.adaptedIngredients && (
+              <View style={[styles.cheapenResults, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+                <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 10 }]}>LIDL SUBSTITUTIONS</Text>
+                {state.adaptedIngredients.map((item, i) => (
+                  <View key={i} style={[styles.substitutionRow, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.subOriginal, { color: colors.text3 }]}>{item.original}</Text>
+                    {item.lidlProduct
+                      ? <Text style={[styles.subProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
+                      : <Text style={[styles.subProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                    }
+                    {item.note ? <Text style={[styles.subNote, { color: colors.text3 }]}>{item.note}</Text> : null}
+                  </View>
+                ))}
+                <TouchableOpacity
+                  style={[styles.applyBtn, { backgroundColor: colors.lime }]}
+                  onPress={onApplyCheapen}
+                >
+                  <Text style={[styles.primaryBtnText, { color: colors.background }]}>Apply Lidl substitutions</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Save to My Recipes toggle */}
+            <View style={[styles.saveToggleRow, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+              <Text style={[styles.saveToggleLabel, { color: colors.text }]}>Save to My Recipes</Text>
+              <Switch
+                value={state.saveToRecipes}
+                onValueChange={v => set({ saveToRecipes: v })}
+                trackColor={{ false: colors.surface3, true: colors.lime }}
+                thumbColor="#fff"
+              />
             </View>
 
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onConfirm}>
@@ -523,7 +599,7 @@ function SwapModal({ state, colors, onChange, onAIGenerate, onTikTokAnalyze, onC
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.secondaryBtn, { borderColor: colors.border }]}
-              onPress={() => set({ phase: state.tiktokUrl ? 'tiktok' : 'ai', candidate: null })}
+              onPress={() => set({ phase: state.userRecipes.length > 0 ? 'my-recipes' : 'ai', candidate: null, adaptedIngredients: null })}
             >
               <Text style={[styles.secondaryBtnText, { color: colors.text2 }]}>Try Again</Text>
             </TouchableOpacity>
@@ -596,23 +672,22 @@ const styles = StyleSheet.create({
   logBtnText: { fontSize: 14, fontWeight: '600' },
   // modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
+  modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   modalTitle: { fontSize: 20, fontWeight: '700' },
   closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { fontSize: 14, fontWeight: '700' },
-  // choose phase
+  // choose
   chooseGrid: { gap: 12, marginBottom: 8 },
   chooseCard: { borderWidth: 1.5, borderRadius: 20, padding: 20, gap: 8 },
   chooseIcon: { fontSize: 32 },
   chooseTitle: { fontSize: 18, fontWeight: '700' },
   chooseDesc: { fontSize: 13, lineHeight: 18 },
-  // input phase
+  // input
   inputPhase: { gap: 12 },
   inputLabel: { fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase' },
   textArea: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 90, textAlignVertical: 'top' },
-  urlInput: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15 },
   errorMsg: { fontSize: 13 },
   primaryBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   primaryBtnText: { fontSize: 15, fontWeight: '700' },
@@ -620,19 +695,42 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 15, fontWeight: '600' },
   backBtn: { alignItems: 'center', paddingVertical: 8 },
   backBtnText: { fontSize: 14 },
-  // loading phase
+  // my recipes
+  savedRecipeRow: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  savedRecipeName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  savedRecipeMeta: { fontSize: 12 },
+  savedRecipeLidl: { fontSize: 11, marginTop: 4 },
+  savedRecipeArrow: { fontSize: 22 },
+  emptyRecipes: { alignItems: 'center', paddingVertical: 48, gap: 10 },
+  emptyIcon: { fontSize: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: '600' },
+  emptyDesc: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  // loading
   loadingPhase: { alignItems: 'center', paddingVertical: 48, gap: 16 },
   loadingMsg: { fontSize: 15 },
-  // preview phase
-  previewPhase: { gap: 16 },
-  previewLabel: { fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase' },
+  // preview
+  previewPhase: { gap: 14 },
   previewCard: { borderWidth: 1.5, borderRadius: 20, padding: 18, gap: 12 },
   previewName: { fontSize: 19, fontWeight: '700', lineHeight: 24 },
-  previewMacros: { flexDirection: 'row', gap: 0 },
+  previewMacros: { flexDirection: 'row' },
   previewMacroItem: { flex: 1, alignItems: 'center' },
   previewMacroVal: { fontSize: 15, fontWeight: '700' },
   previewMacroLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.08 },
-  previewIngredients: { gap: 6 },
-  previewIngrTitle: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.12 },
+  previewIngredients: { gap: 4 },
   previewIngr: { fontSize: 13, lineHeight: 20 },
+  lidlApplied: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
+  lidlAppliedTitle: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
+  // cheapen
+  cheapenBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18 },
+  cheapenIcon: { fontSize: 18 },
+  cheapenText: { fontSize: 15, fontWeight: '600' },
+  cheapenResults: { borderWidth: 1, borderRadius: 16, padding: 16, gap: 4 },
+  substitutionRow: { paddingBottom: 10, marginBottom: 10, borderBottomWidth: 1 },
+  subOriginal: { fontSize: 12, marginBottom: 2 },
+  subProduct: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  subNote: { fontSize: 11, fontStyle: 'italic' },
+  applyBtn: { borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
+  // save toggle
+  saveToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14 },
+  saveToggleLabel: { fontSize: 15, fontWeight: '500' },
 });

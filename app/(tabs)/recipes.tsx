@@ -1,8 +1,17 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { AdaptedIngredient, adaptRecipeWithLidl, analyzeTiktok, TiktokRecipe } from '@/services/api';
-import React, { useState } from 'react';
+import {
+  AdaptedIngredient,
+  adaptRecipeWithLidl,
+  analyzeTiktok,
+  deleteUserRecipe,
+  fetchUserRecipes,
+  saveUserRecipe,
+  TiktokRecipe,
+  UserRecipe,
+} from '@/services/api';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -17,17 +26,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-interface RecipeState {
+interface ImportState {
   addDay: string | null;
   addSlot: number;
   added: boolean;
   adapting: boolean;
   adaptedIngredients: AdaptedIngredient[] | null;
   adaptError: string | null;
+  saving: boolean;
+  savedOk: boolean;
 }
 
-function defaultRecipeState(): RecipeState {
-  return { addDay: null, addSlot: 0, added: false, adapting: false, adaptedIngredients: null, adaptError: null };
+function defaultImportState(): ImportState {
+  return { addDay: null, addSlot: 0, added: false, adapting: false, adaptedIngredients: null, adaptError: null, saving: false, savedOk: false };
 }
 
 export default function RecipesScreen() {
@@ -35,20 +46,70 @@ export default function RecipesScreen() {
   const colors = Colors[colorScheme ?? 'dark'];
   const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
 
+  // ── My Recipes (Supabase) ──────────────────────────────────────────────────
+  const [myRecipes, setMyRecipes] = useState<UserRecipe[]>([]);
+  const [loadingMyRecipes, setLoadingMyRecipes] = useState(false);
+  const [expandedMyRecipe, setExpandedMyRecipe] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadMyRecipes = useCallback(async () => {
+    setLoadingMyRecipes(true);
+    try {
+      const data = await fetchUserRecipes();
+      setMyRecipes(data);
+    } finally {
+      setLoadingMyRecipes(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMyRecipes(); }, [loadMyRecipes]);
+
+  const handleDeleteMyRecipe = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await deleteUserRecipe(id);
+      setMyRecipes(prev => prev.filter(r => r.id !== id));
+      if (expandedMyRecipe === id) setExpandedMyRecipe(null);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // ── TikTok imports (in-memory) ─────────────────────────────────────────────
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
   const [tiktokUrl, setTiktokUrl] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importedRecipes, setImportedRecipes] = useState<TiktokRecipe[]>([]);
   const [expandedRecipe, setExpandedRecipe] = useState<number | null>(null);
-  const [recipeStates, setRecipeStates] = useState<RecipeState[]>([]);
+  const [importStates, setImportStates] = useState<ImportState[]>([]);
 
   const planDays = plan?.days.map(d => d.day) ?? [];
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
   const mealAccentColors = [colors.orange, colors.lime, colors.blue, '#c47fff'];
 
-  const updateRecipeState = (idx: number, patch: Partial<RecipeState>) => {
-    setRecipeStates(prev => {
+  // ── Plan meal save state ───────────────────────────────────────────────────
+  const [planMealSaving, setPlanMealSaving] = useState<Record<number, boolean>>({});
+
+  // Derive which plan meals are already saved (by name, case-insensitive)
+  const savedNames = new Set(myRecipes.map(r => r.name.toLowerCase()));
+  const isPlanMealSaved = (name: string) => savedNames.has(name.toLowerCase());
+
+  const handleSavePlanMeal = async (idx: number) => {
+    const meal = todayPlan?.meals[idx];
+    if (!meal) return;
+    setPlanMealSaving(prev => ({ ...prev, [idx]: true }));
+    try {
+      await saveUserRecipe(meal);
+      await loadMyRecipes();
+    } finally {
+      setPlanMealSaving(prev => ({ ...prev, [idx]: false }));
+    }
+  };
+
+  // ── TikTok helpers ─────────────────────────────────────────────────────────
+  const updateImportState = (idx: number, patch: Partial<ImportState>) => {
+    setImportStates(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...patch };
       return next;
@@ -63,7 +124,7 @@ export default function RecipesScreen() {
     try {
       const recipe = await analyzeTiktok(url);
       setImportedRecipes(prev => [recipe, ...prev]);
-      setRecipeStates(prev => [defaultRecipeState(), ...prev]);
+      setImportStates(prev => [defaultImportState(), ...prev]);
       setTiktokUrl('');
       setExpandedRecipe(0);
     } catch (err) {
@@ -74,20 +135,44 @@ export default function RecipesScreen() {
   };
 
   const handleAddToDay = (recipeIdx: number) => {
-    const state = recipeStates[recipeIdx];
+    const state = importStates[recipeIdx];
     if (!state?.addDay) return;
     addTiktokMeal(state.addDay, state.addSlot, importedRecipes[recipeIdx]);
-    updateRecipeState(recipeIdx, { added: true });
+    updateImportState(recipeIdx, { added: true });
   };
 
   const handleAdapt = async (recipeIdx: number) => {
     const recipe = importedRecipes[recipeIdx];
-    updateRecipeState(recipeIdx, { adapting: true, adaptError: null, adaptedIngredients: null });
+    updateImportState(recipeIdx, { adapting: true, adaptError: null, adaptedIngredients: null });
     try {
       const result = await adaptRecipeWithLidl(recipe.title, recipe.ingredients);
-      updateRecipeState(recipeIdx, { adapting: false, adaptedIngredients: result.adaptedIngredients });
+      updateImportState(recipeIdx, { adapting: false, adaptedIngredients: result.adaptedIngredients });
     } catch (err) {
-      updateRecipeState(recipeIdx, { adapting: false, adaptError: (err as Error).message });
+      updateImportState(recipeIdx, { adapting: false, adaptError: (err as Error).message });
+    }
+  };
+
+  const handleSaveImported = async (recipeIdx: number) => {
+    const recipe = importedRecipes[recipeIdx];
+    const state = importStates[recipeIdx];
+    updateImportState(recipeIdx, { saving: true });
+    try {
+      const lidlProducts = state.adaptedIngredients
+        ? state.adaptedIngredients.filter(a => a.lidlProduct).map(a => a.lidlProduct!)
+        : [];
+      await saveUserRecipe({
+        name: recipe.title,
+        calories: recipe.macros.calories,
+        protein_g: recipe.macros.protein_g,
+        carbs_g: recipe.macros.carbs_g,
+        fat_g: recipe.macros.fat_g,
+        ingredients: recipe.ingredients,
+        lidl_products_used: lidlProducts,
+      });
+      updateImportState(recipeIdx, { saving: false, savedOk: true });
+      loadMyRecipes();
+    } catch {
+      updateImportState(recipeIdx, { saving: false });
     }
   };
 
@@ -96,7 +181,7 @@ export default function RecipesScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Recipes</Text>
-          <Text style={[styles.subtitle, { color: colors.text3 }]}>Your plan + saved imports</Text>
+          <Text style={[styles.subtitle, { color: colors.text3 }]}>Saved recipes + plan meals</Text>
         </View>
 
         {/* TikTok import */}
@@ -130,18 +215,114 @@ export default function RecipesScreen() {
               }
             </TouchableOpacity>
           </View>
-          {importError && (
-            <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>
-          )}
+          {importError && <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>}
         </View>
 
-        {/* Imported recipes */}
+        {/* ── My Recipes (from Supabase) ──────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>My Recipes</Text>
+            {loadingMyRecipes && <ActivityIndicator color={colors.lime} size="small" />}
+          </View>
+
+          {!loadingMyRecipes && myRecipes.length === 0 && (
+            <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.emptyText, { color: colors.text3 }]}>No saved recipes yet — save plan meals or TikTok imports below.</Text>
+            </View>
+          )}
+
+          {myRecipes.map(recipe => {
+            const open = expandedMyRecipe === recipe.id;
+            const isDeleting = deletingId === recipe.id;
+            const hasLidl = recipe.lidl_products_used.length > 0;
+
+            return (
+              <View
+                key={recipe.id}
+                style={[styles.recipeCard, { backgroundColor: colors.surface, borderColor: open ? colors.lime : colors.border }]}
+              >
+                <TouchableOpacity onPress={() => setExpandedMyRecipe(open ? null : recipe.id)} activeOpacity={0.85}>
+                  <View style={styles.recipeCardHeader}>
+                    <View style={styles.recipeCardLeft}>
+                      <Text style={[styles.recipeName, { color: colors.text }]}>{recipe.name}</Text>
+                      <View style={styles.recipeMeta}>
+                        <Text style={[styles.recipeMetaText, { color: colors.lime }]}>{recipe.calories} kcal</Text>
+                        <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>P {recipe.protein_g}g</Text>
+                        <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>C {recipe.carbs_g}g</Text>
+                        <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>F {recipe.fat_g}g</Text>
+                        {hasLidl && (
+                          <View style={[styles.lidlBadge, { backgroundColor: colors.limeDim }]}>
+                            <Text style={[styles.lidlBadgeText, { color: colors.lime }]}>Lidl</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.deleteBtn, { backgroundColor: colors.surface3 }]}
+                      onPress={() => handleDeleteMyRecipe(recipe.id)}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting
+                        ? <ActivityIndicator color={colors.orange} size="small" />
+                        : <Text style={[styles.deleteBtnText, { color: colors.orange }]}>✕</Text>
+                      }
+                    </TouchableOpacity>
+                    <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {open && (
+                  <>
+                    <View style={styles.macroPills}>
+                      {[
+                        { label: 'P', val: `${recipe.protein_g}g`, color: colors.lime },
+                        { label: 'C', val: `${recipe.carbs_g}g`, color: colors.blue },
+                        { label: 'F', val: `${recipe.fat_g}g`, color: colors.orange },
+                      ].map(m => (
+                        <View key={m.label} style={[styles.macroPill, { backgroundColor: colors.surface2 }]}>
+                          <Text style={[styles.macroPillVal, { color: m.color }]}>{m.val}</Text>
+                          <Text style={[styles.macroPillLabel, { color: colors.text3 }]}>{m.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {recipe.ingredients.length > 0 && (
+                      <>
+                        <Text style={[styles.subheading, { color: colors.text3 }]}>INGREDIENTS</Text>
+                        {recipe.ingredients.map((ing, i) => (
+                          <View key={i} style={styles.ingredientRow}>
+                            <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
+                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+
+                    {hasLidl && (
+                      <>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>FROM LIDL</Text>
+                        {recipe.lidl_products_used.map((p, i) => (
+                          <View key={i} style={styles.ingredientRow}>
+                            <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
+                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{p}</Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* ── TikTok imports (in-memory) ────────────────────────────────────── */}
         {importedRecipes.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Imported</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Imported (this session)</Text>
             {importedRecipes.map((recipe, idx) => {
               const open = expandedRecipe === idx;
-              const state = recipeStates[idx] ?? defaultRecipeState();
+              const state = importStates[idx] ?? defaultImportState();
 
               return (
                 <View
@@ -164,7 +345,6 @@ export default function RecipesScreen() {
 
                   {open && (
                     <>
-                      {/* Macro pills */}
                       <View style={styles.macroPills}>
                         {[
                           { label: 'P', val: `${recipe.macros.protein_g}g`, color: colors.lime },
@@ -178,7 +358,6 @@ export default function RecipesScreen() {
                         ))}
                       </View>
 
-                      {/* Ingredients */}
                       <Text style={[styles.subheading, { color: colors.text3 }]}>INGREDIENTS</Text>
                       {recipe.ingredients.map((ing, i) => (
                         <View key={i} style={styles.ingredientRow}>
@@ -187,7 +366,6 @@ export default function RecipesScreen() {
                         </View>
                       ))}
 
-                      {/* Steps */}
                       {recipe.steps.length > 0 && (
                         <>
                           <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>STEPS</Text>
@@ -202,11 +380,9 @@ export default function RecipesScreen() {
                         </>
                       )}
 
-                      {/* ── Add to Plan ─────────────────────────────────── */}
+                      {/* Add to Plan */}
                       <View style={[styles.addToPlanBox, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}>
                         <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>ADD TO PLAN</Text>
-
-                        {/* Day chips */}
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayChipsScroll}>
                           <View style={styles.dayChips}>
                             {planDays.map(day => {
@@ -215,7 +391,7 @@ export default function RecipesScreen() {
                                 <TouchableOpacity
                                   key={day}
                                   style={[styles.dayChip, { backgroundColor: sel ? colors.lime : colors.surface3, borderColor: sel ? colors.lime : colors.border2 }]}
-                                  onPress={() => updateRecipeState(idx, { addDay: day, added: false })}
+                                  onPress={() => updateImportState(idx, { addDay: day, added: false })}
                                 >
                                   <Text style={[styles.dayChipText, { color: sel ? colors.background : colors.text3 }]}>
                                     {day.slice(0, 3)}
@@ -225,8 +401,6 @@ export default function RecipesScreen() {
                             })}
                           </View>
                         </ScrollView>
-
-                        {/* Slot selector */}
                         <View style={styles.slotRow}>
                           {MEAL_SLOTS.map((slot, slotIdx) => {
                             const sel = state.addSlot === slotIdx;
@@ -234,15 +408,13 @@ export default function RecipesScreen() {
                               <TouchableOpacity
                                 key={slot}
                                 style={[styles.slotChip, { backgroundColor: sel ? colors.blue + '33' : colors.surface3, borderColor: sel ? colors.blue : colors.border2 }]}
-                                onPress={() => updateRecipeState(idx, { addSlot: slotIdx, added: false })}
+                                onPress={() => updateImportState(idx, { addSlot: slotIdx, added: false })}
                               >
                                 <Text style={[styles.slotChipText, { color: sel ? colors.blue : colors.text3 }]}>{slot}</Text>
                               </TouchableOpacity>
                             );
                           })}
                         </View>
-
-                        {/* Add button */}
                         <TouchableOpacity
                           style={[styles.addBtn, { backgroundColor: state.added ? colors.surface3 : state.addDay ? colors.lime : colors.surface3, opacity: state.addDay ? 1 : 0.4 }]}
                           onPress={() => handleAddToDay(idx)}
@@ -254,7 +426,7 @@ export default function RecipesScreen() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* ── Adapt with Lidl ─────────────────────────────── */}
+                      {/* Adapt with Lidl */}
                       <View style={styles.adaptSection}>
                         <TouchableOpacity
                           style={[styles.adaptBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
@@ -269,11 +441,9 @@ export default function RecipesScreen() {
                             {state.adapting ? 'Finding Lidl matches…' : 'Adapt with Lidl'}
                           </Text>
                         </TouchableOpacity>
-
                         {state.adaptError && (
                           <Text style={[styles.importError, { color: colors.orange, marginTop: 6 }]}>{state.adaptError}</Text>
                         )}
-
                         {state.adaptedIngredients && (
                           <View style={[styles.adaptResults, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
                             <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>LIDL SUBSTITUTIONS</Text>
@@ -293,6 +463,22 @@ export default function RecipesScreen() {
                           </View>
                         )}
                       </View>
+
+                      {/* Save to My Recipes */}
+                      <TouchableOpacity
+                        style={[styles.saveBtn, { backgroundColor: state.savedOk ? colors.surface3 : colors.lime, opacity: state.saving ? 0.7 : 1 }]}
+                        onPress={() => handleSaveImported(idx)}
+                        disabled={state.saving || state.savedOk}
+                      >
+                        {state.saving
+                          ? <ActivityIndicator color={colors.background} size="small" />
+                          : <Text style={[styles.saveBtnText, { color: state.savedOk ? colors.lime : colors.background }]}>
+                              {state.savedOk
+                                ? `✓ Saved${state.adaptedIngredients ? ' with Lidl products' : ''}`
+                                : `Save to My Recipes${state.adaptedIngredients ? ' (with Lidl)' : ''}`}
+                            </Text>
+                        }
+                      </TouchableOpacity>
                     </>
                   )}
                 </View>
@@ -301,7 +487,7 @@ export default function RecipesScreen() {
           </View>
         )}
 
-        {/* Today's plan meals as recipes */}
+        {/* ── Today's plan meals ───────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: colors.text3 }]}>
             {TODAY}&apos;s Meals
@@ -319,6 +505,8 @@ export default function RecipesScreen() {
             const accent = mealAccentColors[idx % mealAccentColors.length];
             const mealType = MEAL_SLOTS[idx] ?? 'Meal';
             const hasLidl = meal.lidl_products_used.length > 0;
+            const alreadySaved = isPlanMealSaved(meal.name);
+            const isSaving = planMealSaving[idx] ?? false;
 
             return (
               <TouchableOpacity
@@ -334,6 +522,22 @@ export default function RecipesScreen() {
                   <Text style={[styles.mealRecipeName, { color: colors.text }]} numberOfLines={open ? undefined : 1}>
                     {meal.name}
                   </Text>
+                  {/* Save button */}
+                  <TouchableOpacity
+                    style={[styles.mealSaveBtn, {
+                      backgroundColor: alreadySaved ? colors.limeDim : colors.surface3,
+                      borderColor: alreadySaved ? colors.lime : colors.border2,
+                    }]}
+                    onPress={e => { e.stopPropagation(); handleSavePlanMeal(idx); }}
+                    disabled={isSaving || alreadySaved}
+                  >
+                    {isSaving
+                      ? <ActivityIndicator color={colors.lime} size="small" />
+                      : <Text style={[styles.mealSaveBtnText, { color: alreadySaved ? colors.lime : colors.text3 }]}>
+                          {alreadySaved ? '✓' : '+'}
+                        </Text>
+                    }
+                  </TouchableOpacity>
                   <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
                 </View>
 
@@ -343,6 +547,9 @@ export default function RecipesScreen() {
                     <View style={[styles.lidlBadge, { backgroundColor: colors.limeDim, borderColor: 'rgba(181,242,61,0.2)' }]}>
                       <Text style={[styles.lidlBadgeText, { color: colors.lime }]}>Lidl</Text>
                     </View>
+                  )}
+                  {alreadySaved && (
+                    <Text style={[styles.savedLabel, { color: colors.lime }]}>Saved</Text>
                   )}
                 </View>
 
@@ -373,21 +580,40 @@ export default function RecipesScreen() {
                       </>
                     )}
 
-                    <Text style={[styles.subheading, { color: colors.text3, marginTop: hasLidl ? 14 : 0 }]}>
-                      INGREDIENTS
-                    </Text>
-                    {meal.ingredients.map((ing, i) => (
-                      <View key={i} style={styles.ingredientRow}>
-                        <View style={[styles.ingredientDot, { backgroundColor: colors.surface3 }]} />
-                        <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
-                      </View>
-                    ))}
+                    {meal.ingredients.length > 0 ? (
+                      <>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: hasLidl ? 14 : 0 }]}>INGREDIENTS</Text>
+                        {meal.ingredients.map((ing, i) => (
+                          <View key={i} style={styles.ingredientRow}>
+                            <View style={[styles.ingredientDot, { backgroundColor: colors.surface3 }]} />
+                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                          </View>
+                        ))}
+                      </>
+                    ) : (
+                      <Text style={[styles.noIngredientsText, { color: colors.text3 }]}>No ingredient details available for this meal.</Text>
+                    )}
+
+                    {!alreadySaved && (
+                      <TouchableOpacity
+                        style={[styles.saveBtn, { backgroundColor: colors.lime, opacity: isSaving ? 0.7 : 1, marginTop: 14 }]}
+                        onPress={() => handleSavePlanMeal(idx)}
+                        disabled={isSaving}
+                      >
+                        {isSaving
+                          ? <ActivityIndicator color={colors.background} size="small" />
+                          : <Text style={[styles.saveBtnText, { color: colors.background }]}>Save to My Recipes</Text>
+                        }
+                      </TouchableOpacity>
+                    )}
                   </>
                 )}
               </TouchableOpacity>
             );
           })}
         </View>
+
+        <View style={{ height: 80 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -411,14 +637,19 @@ const styles = StyleSheet.create({
   importBtnText: { fontSize: 14, fontWeight: '700' },
   importError: { fontSize: 12, marginTop: 8 },
   section: { paddingHorizontal: 24, marginBottom: 8 },
-  sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 10 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase' },
+  emptyCard: { borderWidth: 1, borderRadius: 14, padding: 16 },
+  emptyText: { fontSize: 13, lineHeight: 18 },
   recipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 10 },
-  recipeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  recipeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   recipeCardLeft: { flex: 1 },
   recipeName: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
-  recipeMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  recipeMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
   recipeMetaText: { fontSize: 12 },
   chevron: { fontSize: 11, paddingTop: 2 },
+  deleteBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  deleteBtnText: { fontSize: 12, fontWeight: '700' },
   macroPills: { flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 4 },
   macroPill: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center', minWidth: 56 },
   macroPillVal: { fontSize: 14, fontWeight: '700' },
@@ -454,15 +685,22 @@ const styles = StyleSheet.create({
   adaptProduct: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
   adaptNote: { fontSize: 11, fontStyle: 'italic' },
   adaptDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, flexShrink: 0 },
+  // Save button
+  saveBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  saveBtnText: { fontSize: 14, fontWeight: '700' },
   // Plan meals
   mealRecipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 10 },
-  mealRecipeHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  mealRecipeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   mealTypePill: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 8, flexShrink: 0 },
   mealTypePillText: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.1 },
   mealRecipeName: { flex: 1, fontSize: 15, fontWeight: '600' },
+  mealSaveBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  mealSaveBtnText: { fontSize: 14, fontWeight: '700' },
   mealRecipeMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   lidlBadge: { borderWidth: 1, borderRadius: 6, paddingVertical: 2, paddingHorizontal: 7 },
   lidlBadgeText: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.1 },
+  savedLabel: { fontSize: 10, fontWeight: '600' },
+  noIngredientsText: { fontSize: 13, fontStyle: 'italic', marginTop: 12, marginBottom: 4 },
   planLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   planLoadingText: { fontSize: 14 },
 });

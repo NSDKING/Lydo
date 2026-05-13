@@ -1,7 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Meal } from '@/services/api';
+import { AdaptedIngredient, adaptRecipeWithLidl, Meal, saveUserRecipe } from '@/services/api';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -175,6 +175,40 @@ export default function TodayScreen() {
 }
 
 function RecipeSheet({ meal, colors, onClose }: { meal: Meal; colors: any; onClose: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [cheapening, setCheapening] = useState(false);
+  const [cheapenError, setCheapenError] = useState<string | null>(null);
+  const [adaptedIngredients, setAdaptedIngredients] = useState<AdaptedIngredient[] | null>(null);
+
+  const handleCheapen = async () => {
+    setCheapening(true);
+    setCheapenError(null);
+    try {
+      const result = await adaptRecipeWithLidl(meal.name, meal.ingredients);
+      setAdaptedIngredients(result.adaptedIngredients);
+    } catch (err) {
+      setCheapenError((err as Error).message);
+    } finally {
+      setCheapening(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const lidlProducts = adaptedIngredients
+        ? adaptedIngredients.filter(a => a.lidlProduct).map(a => a.lidlProduct!)
+        : meal.lidl_products_used;
+      await saveUserRecipe({ ...meal, lidl_products_used: lidlProducts });
+      setSavedOk(true);
+    } catch {
+      // silent — user can retry
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const macroItems = [
     { label: 'Protein', value: `${meal.protein_g}g`, color: colors.lime },
     { label: 'Carbs',   value: `${meal.carbs_g}g`,   color: colors.blue },
@@ -235,6 +269,62 @@ function RecipeSheet({ meal, colors, onClose }: { meal: Meal; colors: any; onClo
           </View>
         )}
 
+        {/* Cheapen with Lidl */}
+        {!adaptedIngredients && (
+          <TouchableOpacity
+            style={[styles.sheetActionBtn, { backgroundColor: colors.surface3, borderColor: colors.border, opacity: cheapening ? 0.7 : 1 }]}
+            onPress={handleCheapen}
+            disabled={cheapening}
+          >
+            {cheapening
+              ? <ActivityIndicator color={colors.lime} size="small" />
+              : <Text style={styles.sheetActionIcon}>🛒</Text>
+            }
+            <Text style={[styles.sheetActionText, { color: cheapening ? colors.text3 : colors.lime }]}>
+              {cheapening ? 'Finding Lidl matches…' : 'Cheapen with Lidl'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {cheapenError && (
+          <Text style={[styles.sheetErrorText, { color: colors.orange }]}>{cheapenError}</Text>
+        )}
+
+        {/* Lidl substitutions */}
+        {adaptedIngredients && (
+          <View style={[styles.sheetSection, styles.adaptBox, { backgroundColor: colors.surface3, borderColor: colors.border }]}>
+            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>LIDL SUBSTITUTIONS</Text>
+            {adaptedIngredients.map((item, i) => (
+              <View key={i} style={styles.adaptRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
+                  {item.lidlProduct
+                    ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
+                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                  }
+                  {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
+                </View>
+                <View style={[styles.adaptDot, { backgroundColor: item.lidlProduct ? colors.lime : colors.surface2 }]} />
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Save to My Recipes */}
+        <TouchableOpacity
+          style={[styles.sheetSaveBtn, { backgroundColor: savedOk ? colors.surface3 : colors.lime, opacity: saving ? 0.7 : 1 }]}
+          onPress={handleSave}
+          disabled={saving || savedOk}
+        >
+          {saving
+            ? <ActivityIndicator color={colors.background} size="small" />
+            : <Text style={[styles.sheetSaveBtnText, { color: savedOk ? colors.lime : colors.background }]}>
+                {savedOk
+                  ? `✓ Saved${adaptedIngredients ? ' with Lidl' : ''}`
+                  : `Save to My Recipes${adaptedIngredients ? ' (with Lidl)' : ''}`}
+              </Text>
+          }
+        </TouchableOpacity>
+
         <View style={{ height: 32 }} />
       </ScrollView>
     </>
@@ -293,4 +383,16 @@ const styles = StyleSheet.create({
   ingredientRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1 },
   ingredientDot: { width: 6, height: 6, borderRadius: 3 },
   ingredientText: { fontSize: 15 },
+  sheetActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 12 },
+  sheetActionIcon: { fontSize: 16 },
+  sheetActionText: { fontSize: 14, fontWeight: '600' },
+  sheetErrorText: { fontSize: 12, marginBottom: 10 },
+  adaptBox: { borderWidth: 1, borderRadius: 14, padding: 14 },
+  adaptRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 10 },
+  adaptOriginal: { fontSize: 11, marginBottom: 2 },
+  adaptProduct: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  adaptNote: { fontSize: 11, fontStyle: 'italic' },
+  adaptDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, flexShrink: 0 },
+  sheetSaveBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  sheetSaveBtnText: { fontSize: 14, fontWeight: '700' },
 });

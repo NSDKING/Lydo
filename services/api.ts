@@ -150,3 +150,49 @@ export async function adaptRecipeWithLidl(
 ): Promise<{ adaptedIngredients: AdaptedIngredient[] }> {
   return post('/recipe/adapt', { title, ingredients }, 60_000);
 }
+
+// ─── User Recipes (Supabase direct) ──────────────────────────────────────────
+
+export interface UserRecipe {
+  id: string;
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  ingredients: string[];
+  lidl_products_used: string[];
+  created_at: string;
+}
+
+export async function fetchUserRecipes(): Promise<UserRecipe[]> {
+  const { data } = await supabase
+    .from('user_recipes')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data as UserRecipe[] | null) ?? [];
+}
+
+export async function saveUserRecipe(
+  recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'>
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('user_recipes')
+    .insert({
+      name: recipe.name,
+      calories: recipe.calories,
+      protein_g: recipe.protein_g,
+      carbs_g: recipe.carbs_g,
+      fat_g: recipe.fat_g,
+      ingredients: recipe.ingredients,
+      lidl_products_used: recipe.lidl_products_used,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+  return (data as { id: string }).id;
+}
+
+export async function deleteUserRecipe(id: string): Promise<void> {
+  await supabase.from('user_recipes').delete().eq('id', id);
+}
