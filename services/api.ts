@@ -140,8 +140,22 @@ export async function fetchLidlCatalog(): Promise<LidlPromoDetail[]> {
     .select('title, price, old_price, discount_percent, image_url')
     .eq('available', true)
     .order('discount_percent', { ascending: false, nullsFirst: false })
-    .limit(300);
-  return (data as LidlPromoDetail[] | null) ?? [];
+    .limit(1000);
+
+  const rows = (data as LidlPromoDetail[] | null) ?? [];
+
+  // Deduplicate by title — keep the row with the most data (prefers discounted/imaged rows)
+  const seen = new Map<string, LidlPromoDetail>();
+  for (const row of rows) {
+    const key = row.title.toLowerCase();
+    const existing = seen.get(key);
+    if (!existing) { seen.set(key, row); continue; }
+    // Prefer: has discount_percent > has image_url > any
+    const score = (r: LidlPromoDetail) => (r.discount_percent ? 2 : 0) + (r.image_url ? 1 : 0);
+    if (score(row) > score(existing)) seen.set(key, row);
+  }
+
+  return [...seen.values()];
 }
 
 export async function adaptRecipeWithLidl(
