@@ -7,6 +7,7 @@ import {
   fetchWeeklyPlan,
   generateMenuPlan,
   getWeekKey,
+  saveUserRecipe,
   swapMeal as apiSwapMeal,
 } from '@/services/api';
 import { supabase } from '@/lib/supabase';
@@ -96,6 +97,12 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       setLoggedMeals({});
       setLockedMeals({});
       setMealOverrides({});
+      // Fire-and-forget: save all generated meals to user_recipes
+      fresh.days.forEach(day =>
+        day.meals.forEach(meal =>
+          saveUserRecipe(meal).catch(() => {})
+        )
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
