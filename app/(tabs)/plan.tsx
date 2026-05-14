@@ -13,7 +13,9 @@ import {
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -371,7 +373,10 @@ export default function PlanScreen() {
       </ScrollView>
 
       <Modal visible={!!swapState} animationType="slide" transparent onRequestClose={() => setSwapState(null)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
             {swapState && (
               <SwapModal
@@ -388,7 +393,7 @@ export default function PlanScreen() {
               />
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
