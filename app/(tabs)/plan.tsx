@@ -170,21 +170,59 @@ export default function PlanScreen() {
     setSwapState(null);
   };
 
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();
+  const norm = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();
   const STOP = new Set(['lidl', 'avec', 'les', 'pour', 'dans', 'des', 'une', 'and', 'the']);
+
+  // Convert any weight/volume string to a common unit (grams or ml)
+  const toGrams = (s: string): number | null => {
+    let m = s.match(/(\d+\.?\d*)\s*kg/i);  if (m) return +m[1] * 1000;
+    m = s.match(/(\d+\.?\d*)\s*g\b/i);     if (m) return +m[1];
+    return null;
+  };
+  const toMl = (s: string): number | null => {
+    let m = s.match(/(\d+\.?\d*)\s*l\b/i); if (m) return +m[1] * 1000;
+    m = s.match(/(\d+\.?\d*)\s*cl\b/i);    if (m) return +m[1] * 10;
+    m = s.match(/(\d+\.?\d*)\s*ml\b/i);    if (m) return +m[1];
+    return null;
+  };
+  const toUnits = (s: string): number | null => {
+    let m = s.match(/x\s*(\d+)/i) || s.match(/(\d+)\s*x\b/i); if (m) return +m[1];
+    m = s.match(/(\d+)\s*(pcs?|pieces?|units?|tranches?|oeufs?|eggs?)/i); if (m) return +m[1];
+    return null;
+  };
+
+  const portionRatio = (ingredient: string, catalogTitle: string): number => {
+    const ig = toGrams(ingredient), cg = toGrams(catalogTitle);
+    if (ig && cg) return Math.min(1, ig / cg);
+    const im = toMl(ingredient), cm = toMl(catalogTitle);
+    if (im && cm) return Math.min(1, im / cm);
+    const iu = toUnits(ingredient), cu = toUnits(catalogTitle);
+    if (iu && cu) return Math.min(1, iu / cu);
+    return 0.3; // can't parse — assume ~30% of package
+  };
+
   const mealCost = (meal: Meal): number | null => {
     if (!catalog.length || !meal.lidl_products_used.length) return null;
     let total = 0; let matched = 0;
-    for (const name of meal.lidl_products_used) {
-      const words = norm(name).split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w));
+    for (const productName of meal.lidl_products_used) {
+      const words = norm(productName).split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w));
       if (!words.length) continue;
       let best: LidlPromoDetail | undefined; let bestScore = 0;
       for (const item of catalog) {
-        const t = norm(item.title);
-        const score = words.filter(w => t.includes(w)).length;
+        const score = words.filter(w => norm(item.title).includes(w)).length;
         if (score > bestScore) { bestScore = score; best = item; }
       }
-      if (best && bestScore > 0) { total += parseFloat(best.price); matched++; }
+      if (!best || bestScore === 0) continue;
+
+      // Find the ingredient line that best matches this product
+      const ingLine = meal.ingredients.find(ing =>
+        words.some(w => norm(ing).includes(w))
+      ) ?? '';
+
+      const ratio = portionRatio(ingLine, best.title);
+      total += ratio * parseFloat(best.price);
+      matched++;
     }
     return matched > 0 ? parseFloat(total.toFixed(2)) : null;
   };
