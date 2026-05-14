@@ -3,9 +3,11 @@ import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   AdaptedIngredient,
+  LidlPromoDetail,
   Meal,
   UserRecipe,
   adaptRecipeWithLidl,
+  fetchLidlCatalog,
   fetchUserRecipes,
   saveUserRecipe,
   swapMeal as apiSwapMeal,
@@ -76,6 +78,11 @@ export default function PlanScreen() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [swapState, setSwapState] = useState<SwapState | null>(null);
+  const [catalog, setCatalog] = useState<LidlPromoDetail[]>([]);
+
+  React.useEffect(() => {
+    fetchLidlCatalog().then(setCatalog).catch(() => {});
+  }, []);
 
   const dayPlan = getEffectiveDayPlan(selectedDay);
   const logged  = loggedMeals[selectedDay]  ?? new Set<number>();
@@ -161,6 +168,25 @@ export default function PlanScreen() {
       } catch { /* non-fatal */ }
     }
     setSwapState(null);
+  };
+
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();
+  const STOP = new Set(['lidl', 'avec', 'les', 'pour', 'dans', 'des', 'une', 'and', 'the']);
+  const mealCost = (meal: Meal): number | null => {
+    if (!catalog.length || !meal.lidl_products_used.length) return null;
+    let total = 0; let matched = 0;
+    for (const name of meal.lidl_products_used) {
+      const words = norm(name).split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w));
+      if (!words.length) continue;
+      let best: LidlPromoDetail | undefined; let bestScore = 0;
+      for (const item of catalog) {
+        const t = norm(item.title);
+        const score = words.filter(w => t.includes(w)).length;
+        if (score > bestScore) { bestScore = score; best = item; }
+      }
+      if (best && bestScore > 0) { total += parseFloat(best.price); matched++; }
+    }
+    return matched > 0 ? parseFloat(total.toFixed(2)) : null;
   };
 
   return (
@@ -258,6 +284,7 @@ export default function PlanScreen() {
             const accentDim = getMealAccentDim(idx);
             const mealType  = MEAL_TYPES[idx] ?? 'Meal';
             const isLidl    = meal.lidl_products_used.length > 0;
+            const cost      = mealCost(meal);
 
             return (
               <TouchableOpacity key={idx} activeOpacity={0.88}
@@ -271,9 +298,14 @@ export default function PlanScreen() {
                   <View style={[styles.mealTypePill, { backgroundColor: accentDim }]}>
                     <Text style={[styles.mealTypePillText, { color: accent }]}>{mealType}</Text>
                   </View>
-                  <Text style={[styles.mealKcal, { color: colors.text3 }]}>
-                    <Text style={{ color: colors.text2 }}>{meal.calories}</Text> kcal
-                  </Text>
+                  <View style={styles.mealHeaderRight}>
+                    <Text style={[styles.mealKcal, { color: colors.text3 }]}>
+                      <Text style={{ color: colors.text2 }}>{meal.calories}</Text> kcal
+                    </Text>
+                    {cost !== null && (
+                      <Text style={[styles.mealCost, { color: colors.lime }]}>~€{cost.toFixed(2)}</Text>
+                    )}
+                  </View>
                   {isLocked && <Text style={styles.lockIcon}>🔒</Text>}
                   {isSwapping && <ActivityIndicator size="small" color={accent} />}
                 </View>
@@ -671,7 +703,9 @@ const styles = StyleSheet.create({
   mealCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 14, paddingHorizontal: 16, paddingBottom: 10 },
   mealTypePill: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 8 },
   mealTypePillText: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.1 },
-  mealKcal: { flex: 1, fontSize: 12, textAlign: 'right' },
+  mealHeaderRight: { flex: 1, alignItems: 'flex-end', gap: 2 },
+  mealKcal: { fontSize: 12, textAlign: 'right' },
+  mealCost: { fontSize: 11, fontWeight: '600', textAlign: 'right' },
   lockIcon: { fontSize: 13 },
   mealName: { fontSize: 17, fontWeight: '600', paddingHorizontal: 16, paddingBottom: 6 },
   mealNameInput: { fontSize: 17, fontWeight: '600', marginHorizontal: 16, marginBottom: 6, borderBottomWidth: 1.5, paddingBottom: 4 },
