@@ -269,6 +269,19 @@ function RecipeSheet({ meal, colors, onClose }: { meal: Meal; colors: any; onClo
           </View>
         )}
 
+        {/* Steps */}
+        <View style={styles.sheetSection}>
+          <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>RECIPE</Text>
+          {(meal.steps ?? []).map((step, i) => (
+              <View key={i} style={[styles.stepRow, { borderBottomColor: colors.border }]}>
+                <View style={[styles.stepNumber, { backgroundColor: colors.surface3 }]}>
+                  <Text style={[styles.stepNumberText, { color: colors.lime }]}>{i + 1}</Text>
+                </View>
+                <Text style={[styles.stepText, { color: colors.text }]}>{step}</Text>
+              </View>
+            ))}
+        </View>
+
         {/* Cheapen with Lidl */}
         {!adaptedIngredients && (
           <TouchableOpacity
@@ -366,7 +379,7 @@ const styles = StyleSheet.create({
   mealButtonText: { fontSize: 12, fontWeight: '700' },
   // modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%', paddingHorizontal: 24, paddingTop: 12 },
+  modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '85%', paddingHorizontal: 24, paddingTop: 12 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 },
   sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20, gap: 12 },
   sheetTitle: { fontSize: 22, fontWeight: '700', lineHeight: 28 },
@@ -395,4 +408,8 @@ const styles = StyleSheet.create({
   adaptDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, flexShrink: 0 },
   sheetSaveBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   sheetSaveBtnText: { fontSize: 14, fontWeight: '700' },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10, borderBottomWidth: 1 },
+  stepNumber: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  stepNumberText: { fontSize: 11, fontWeight: '700' },
+  stepText: { flex: 1, fontSize: 15, lineHeight: 22 },
 });
