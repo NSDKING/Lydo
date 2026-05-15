@@ -11,11 +11,22 @@ import {
   swapMeal as apiSwapMeal,
 } from '@/services/api';
 import { supabase } from '@/lib/supabase';
+import { useProfile } from '@/context/ProfileContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type DayKey = string; // "Monday", "Tuesday", …
 type MealOverrides = Record<DayKey, Record<number, Partial<Meal>>>;
+
+export interface ExtraMeal {
+  id: string;
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  source: 'barcode' | 'ai' | 'manual';
+}
 
 interface MenuContextValue {
   plan: MenuPlan | null;
@@ -40,6 +51,10 @@ interface MenuContextValue {
   addTiktokMeal: (day: DayKey, slotIdx: number, recipe: TiktokRecipe) => void;
   // apply any meal directly (used by swap modal preview confirm)
   applyMealOverride: (day: DayKey, idx: number, meal: Meal) => void;
+  // extra meals logged outside the plan
+  extraMeals: Record<DayKey, ExtraMeal[]>;
+  addExtraMeal: (day: DayKey, meal: Omit<ExtraMeal, 'id'>) => void;
+  removeExtraMeal: (day: DayKey, id: string) => void;
   // persist current plan (with overrides) to Supabase
   persistCurrentPlan: () => Promise<void>;
   // effective meal (base + overrides)
@@ -57,6 +72,7 @@ const MenuContext = createContext<MenuContextValue>({
   swappingMeal: null, swapMeal: async () => {},
   addTiktokMeal: () => {},
   applyMealOverride: () => {},
+  extraMeals: {}, addExtraMeal: () => {}, removeExtraMeal: () => {},
   persistCurrentPlan: async () => {},
   getEffectiveDayPlan: () => null,
 });
@@ -64,6 +80,7 @@ const MenuContext = createContext<MenuContextValue>({
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function MenuProvider({ children }: { children: React.ReactNode }) {
+  const { profile } = useProfile();
   const [plan, setPlan] = useState<MenuPlan | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +89,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [lockedMeals, setLockedMeals] = useState<Record<DayKey, Set<number>>>({});
   const [mealOverrides, setMealOverrides] = useState<MealOverrides>({});
   const [swappingMeal, setSwappingMeal] = useState<{ day: DayKey; idx: number } | null>(null);
+  const [extraMeals, setExtraMeals] = useState<Record<DayKey, ExtraMeal[]>>({});
 
   // Load: check Supabase cache first, run AI only if planExistsInDB is false
   const load = useCallback(async (forceRegenerate = false) => {
@@ -91,7 +109,13 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       // planExistsInDB is false — AI generation required
       setPlanExistsInDB(false);
-      const fresh = await generateMenuPlan({ days: 7, mealsPerDay: 3, targetCalories: 2000 });
+      const fresh = await generateMenuPlan({
+        days: 7,
+        mealsPerDay: 3,
+        targetCalories: profile.daily_calories,
+        preferences: profile.preferences || undefined,
+        dietaryRestrictions: profile.dietary_restrictions || undefined,
+      });
       setPlan(fresh);
       setPlanExistsInDB(true);       // will be persisted by the backend after this
       setLoggedMeals({});
@@ -124,26 +148,40 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   const getEatenCalories = useCallback((day: DayKey): number => {
     const dayPlan = plan?.days.find(d => d.day === day);
-    if (!dayPlan) return 0;
     const logged = loggedMeals[day] ?? new Set<number>();
     const overrides = mealOverrides[day] ?? {};
-    return dayPlan.meals.reduce((sum, meal, i) => {
+    const planCals = (dayPlan?.meals ?? []).reduce((sum, meal, i) => {
       if (!logged.has(i)) return sum;
       return sum + (overrides[i]?.calories ?? meal.calories);
     }, 0);
-  }, [plan, loggedMeals, mealOverrides]);
+    const extraCals = (extraMeals[day] ?? []).reduce((sum, m) => sum + m.calories, 0);
+    return planCals + extraCals;
+  }, [plan, loggedMeals, mealOverrides, extraMeals]);
 
   const getEatenMacros = useCallback((day: DayKey) => {
     const dayPlan = plan?.days.find(d => d.day === day);
-    if (!dayPlan) return { protein_g: 0, carbs_g: 0, fat_g: 0 };
     const logged = loggedMeals[day] ?? new Set<number>();
     const overrides = mealOverrides[day] ?? {};
-    return dayPlan.meals.reduce((acc, meal, i) => {
+    const planMacros = (dayPlan?.meals ?? []).reduce((acc, meal, i) => {
       if (!logged.has(i)) return acc;
       const m = { ...meal, ...overrides[i] };
       return { protein_g: acc.protein_g + m.protein_g, carbs_g: acc.carbs_g + m.carbs_g, fat_g: acc.fat_g + m.fat_g };
     }, { protein_g: 0, carbs_g: 0, fat_g: 0 });
-  }, [plan, loggedMeals, mealOverrides]);
+    return (extraMeals[day] ?? []).reduce((acc, m) => ({
+      protein_g: acc.protein_g + m.protein_g,
+      carbs_g: acc.carbs_g + m.carbs_g,
+      fat_g: acc.fat_g + m.fat_g,
+    }), planMacros);
+  }, [plan, loggedMeals, mealOverrides, extraMeals]);
+
+  const addExtraMeal = useCallback((day: DayKey, meal: Omit<ExtraMeal, 'id'>) => {
+    const entry: ExtraMeal = { ...meal, id: `${Date.now()}-${Math.random()}` };
+    setExtraMeals(prev => ({ ...prev, [day]: [...(prev[day] ?? []), entry] }));
+  }, []);
+
+  const removeExtraMeal = useCallback((day: DayKey, id: string) => {
+    setExtraMeals(prev => ({ ...prev, [day]: (prev[day] ?? []).filter(m => m.id !== id) }));
+  }, []);
 
   // ── Locking ────────────────────────────────────────────────────────────────
 
@@ -219,6 +257,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       carbs_g: recipe.macros.carbs_g,
       fat_g: recipe.macros.fat_g,
       ingredients: recipe.ingredients,
+      steps: recipe.steps ?? [],
       lidl_products_used: [],
     };
     setMealOverrides(prev => ({
@@ -252,6 +291,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       swappingMeal, swapMeal,
       addTiktokMeal,
       applyMealOverride,
+      extraMeals, addExtraMeal, removeExtraMeal,
       persistCurrentPlan,
       getEffectiveDayPlan,
     }}>

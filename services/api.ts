@@ -166,6 +166,12 @@ export async function adaptRecipeWithLidl(
   return post('/recipe/adapt', { title, ingredients }, 60_000);
 }
 
+export async function scanFoodWithAI(imageBase64: string): Promise<{
+  name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; notes?: string;
+}> {
+  return post('/food/scan', { imageBase64 }, 30_000);
+}
+
 // ─── User Recipes (Supabase direct) ──────────────────────────────────────────
 
 export interface UserRecipe {

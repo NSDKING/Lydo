@@ -5,12 +5,14 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { MenuProvider } from '@/context/MenuContext';
+import { ProfileProvider } from '@/context/ProfileContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
+    <ProfileProvider>
     <MenuProvider>
     <Tabs
       initialRouteName="index"
@@ -55,11 +57,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="progress"
         options={{
-          title: 'Progress',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="chart.bar" color={color} />,
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.crop.circle" color={color} />,
         }}
       />
     </Tabs>
     </MenuProvider>
+    </ProfileProvider>
   );
 }

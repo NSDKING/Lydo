@@ -1,3 +1,4 @@
+import { AddFoodModal } from '@/components/AddFoodModal';
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -21,9 +22,10 @@ const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 export default function TodayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros } = useMenu();
+  const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros, extraMeals, removeExtraMeal } = useMenu();
 
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
   const todayLogged = loggedMeals[TODAY] ?? new Set<number>();
@@ -154,8 +156,44 @@ export default function TodayScreen() {
               </TouchableOpacity>
             );
           })}
+
+          {/* Extra items */}
+          {(extraMeals[TODAY] ?? []).length > 0 && (
+            <>
+              <Text style={[styles.planTitle, { color: colors.text3, marginTop: 16 }]}>Extra Items</Text>
+              {(extraMeals[TODAY] ?? []).map(item => (
+                <View
+                  key={item.id}
+                  style={[styles.mealCard, { backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1 }]}
+                >
+                  <View style={styles.mealRowTop}>
+                    <View style={[styles.mealDot, { backgroundColor: colors.blue }]} />
+                    <Text style={[styles.mealText, { color: colors.text }]}>{item.name}</Text>
+                    <Text style={[styles.mealKcal, { color: colors.text3 }]}>{item.calories} kcal</Text>
+                    <TouchableOpacity
+                      style={[styles.mealButton, { backgroundColor: colors.surface3 }]}
+                      onPress={() => removeExtraMeal(TODAY, item.id)}
+                    >
+                      <Text style={[styles.mealButtonText, { color: colors.orange }]}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
         </View>
       </ScrollView>
+
+      {/* FAB */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.lime }]}
+        onPress={() => setAddFoodOpen(true)}
+        activeOpacity={0.85}
+      >
+        <Text style={[styles.fabText, { color: colors.background }]}>+</Text>
+      </TouchableOpacity>
+
+      <AddFoodModal visible={addFoodOpen} onClose={() => setAddFoodOpen(false)} day={TODAY} />
 
       {/* Recipe detail modal */}
       <Modal
@@ -412,4 +450,6 @@ const styles = StyleSheet.create({
   stepNumber: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
   stepNumberText: { fontSize: 11, fontWeight: '700' },
   stepText: { flex: 1, fontSize: 15, lineHeight: 22 },
+  fab: { position: 'absolute', bottom: 32, right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  fabText: { fontSize: 30, lineHeight: 34, fontWeight: '300' },
 });
