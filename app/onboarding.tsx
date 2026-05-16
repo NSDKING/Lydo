@@ -1,322 +1,439 @@
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Link } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { DEFAULT_PROFILE, UserProfile } from '@/context/ProfileContext';
+import { Colors } from '@/constants/theme';
 
-export default function OnboardingScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'dark'];
-  const [currentStep, setCurrentStep] = useState(0);
+const C = Colors.dark;
 
-  const steps = [
-    {
-      title: 'Welcome to Calorie Counter',
-      subtitle: 'Track your nutrition and reach your goals',
-      description: 'Get personalized meal plans, track calories, and achieve your fitness goals with smart nutrition guidance.',
-    },
-    {
-      title: 'Set Your Goals',
-      subtitle: 'What do you want to achieve?',
-      goals: [
-        { id: 'lose', label: 'Lose Weight', icon: '📉' },
-        { id: 'maintain', label: 'Maintain Weight', icon: '⚖️' },
-        { id: 'gain', label: 'Gain Muscle', icon: '💪' },
-      ],
-    },
-    {
-      title: 'Choose Your Plan',
-      subtitle: 'Start your 7-day free trial',
-      plans: [
-        { id: 'monthly', name: 'Monthly', price: '€9.99', period: '/month', popular: false },
-        { id: 'annual', name: 'Annual', price: '€49.99', period: '/year', popular: true, savings: 'Save 58%' },
-      ],
-    },
-  ];
+type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'activity' | 'nutrition' | 'budget' | 'done';
+const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'activity', 'nutrition', 'budget', 'done'];
+const TOTAL_PROGRESS = STEPS.length - 2; // 7: auth → budget
 
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+function calcRecommended(p: UserProfile): number {
+  if (!p.weight_kg || !p.height_cm || !p.age) return 2000;
+  const bmr = 10 * p.weight_kg + 6.25 * p.height_cm - 5 * p.age + 5;
+  const mult = ({ sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 } as Record<string, number>)[p.activity_level] ?? 1.55;
+  const delta = ({ lose: -300, maintain: 0, gain: 300 } as Record<string, number>)[p.goal] ?? 0;
+  return Math.round(bmr * mult) + delta;
+}
 
-  const nextStep = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
+export default function Onboarding() {
+  const router = useRouter();
+  const [idx, setIdx] = useState(0);
+  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState<UserProfile>(DEFAULT_PROFILE);
+
+  const step = STEPS[idx];
+  const isProgressStep = step !== 'welcome' && step !== 'done';
+  const progressIdx = idx - 1; // auth=0, personal=1, ..., budget=6
+  const progressPct = isProgressStep ? progressIdx / TOTAL_PROGRESS : step === 'done' ? 1 : 0;
+
+  const upd = (f: Partial<UserProfile>) => setDraft(p => ({ ...p, ...f }));
+  const back = () => setIdx(i => i - 1);
+  const next = () => {
+    if (step === 'activity') {
+      const rec = calcRecommended(draft);
+      setDraft(p => ({ ...p, daily_calories: rec }));
     }
+    setIdx(i => i + 1);
   };
 
-  const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+  async function doAuth() {
+    setAuthError('');
+    setLoading(true);
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (error) throw error;
+        next();
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) throw error;
+        const uid = data.session?.user?.id;
+        if (uid) {
+          const { data: prof } = await supabase
+            .from('user_profiles').select('user_id').eq('user_id', uid).single();
+          if (prof) { router.replace('/(tabs)'); return; }
+        }
+        next();
+      }
+    } catch (e: any) {
+      setAuthError(e.message ?? 'Authentication failed');
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const renderStepContent = () => {
-    const step = steps[currentStep];
-
-    switch (currentStep) {
-      case 0:
-        return (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: colors.text }]}>{step.title}</Text>
-            <Text style={[styles.stepSubtitle, { color: colors.lime }]}>{step.subtitle}</Text>
-            <Text style={[styles.stepDescription, { color: colors.text2 }]}>{step.description}</Text>
-          </View>
-        );
-
-      case 1:
-        return (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: colors.text }]}>{step.title}</Text>
-            <Text style={[styles.stepSubtitle, { color: colors.lime }]}>{step.subtitle}</Text>
-            <View style={styles.goalsGrid}>
-              {step.goals?.map((goal) => (
-                <TouchableOpacity
-                  key={goal.id}
-                  style={[
-                    styles.goalPill,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: selectedGoal === goal.id ? colors.lime : colors.border,
-                    }
-                  ]}
-                  onPress={() => setSelectedGoal(goal.id)}
-                >
-                  <Text style={styles.goalIcon}>{goal.icon}</Text>
-                  <Text style={[
-                    styles.goalLabel,
-                    { color: selectedGoal === goal.id ? colors.lime : colors.text2 }
-                  ]}>
-                    {goal.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        );
-
-      case 2:
-        return (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: colors.text }]}>{step.title}</Text>
-            <Text style={[styles.stepSubtitle, { color: colors.lime }]}>{step.subtitle}</Text>
-            <View style={styles.plansContainer}>
-              {step.plans?.map((plan) => (
-                <TouchableOpacity
-                  key={plan.id}
-                  style={[
-                    styles.planCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: selectedPlan === plan.id ? colors.lime : colors.border,
-                      borderWidth: selectedPlan === plan.id ? 2 : 1,
-                    }
-                  ]}
-                  onPress={() => setSelectedPlan(plan.id)}
-                >
-                  {plan.popular && (
-                    <View style={[styles.popularBadge, { backgroundColor: colors.lime }]}>
-                      <Text style={[styles.popularText, { color: colors.background }]}>Most Popular</Text>
-                    </View>
-                  )}
-                  <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
-                  <Text style={[styles.planPrice, { color: colors.lime }]}>
-                    {plan.price}
-                    <Text style={[styles.planPeriod, { color: colors.text3 }]}>{plan.period}</Text>
-                  </Text>
-                  {plan.savings && (
-                    <Text style={[styles.planSavings, { color: colors.lime }]}>{plan.savings}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        );
-
-      default:
-        return null;
+  async function doFinish() {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('user_profiles').upsert({
+          ...draft, user_id: user.id, updated_at: new Date().toISOString(),
+        });
+      }
+    } catch { /* silently fail */ } finally {
+      setLoading(false);
+      router.replace('/(tabs)');
     }
-  };
+  }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <View style={styles.progressBar}>
-          {steps.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.progressDot,
-                {
-                  backgroundColor: index <= currentStep ? colors.lime : colors.surface3,
-                }
-              ]}
-            />
-          ))}
-        </View>
-      </View>
+    <SafeAreaView style={s.safe}>
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {renderStepContent()}
-      </ScrollView>
+          {isProgressStep && (
+            <View style={s.progressWrap}>
+              <View style={s.progressTrack}>
+                <View style={[s.progressFill, { width: `${Math.round(progressPct * 100)}%` as any }]} />
+              </View>
+              <Text style={s.progressLabel}>{progressIdx + 1}/{TOTAL_PROGRESS}</Text>
+            </View>
+          )}
 
-      <View style={styles.footer}>
-        {currentStep > 0 && (
-          <TouchableOpacity style={[styles.navBtn, { borderColor: colors.border }]} onPress={prevStep}>
-            <Text style={[styles.navBtnText, { color: colors.text2 }]}>Back</Text>
-          </TouchableOpacity>
-        )}
+          {step === 'welcome' && (
+            <View style={s.stepWrap}>
+              <Text style={s.bigEmoji}>🥗</Text>
+              <Text style={s.heading}>Mako</Text>
+              <Text style={s.sub}>Your AI-powered nutrition companion</Text>
+              <Text style={s.body}>
+                Get personalized weekly meal plans, track your calories, and shop smart at Lidl.
+              </Text>
+              <Btn label="Get Started" onPress={() => setIdx(1)} />
+            </View>
+          )}
 
-        {currentStep < steps.length - 1 ? (
-          <TouchableOpacity
-            style={[styles.navBtn, styles.primaryBtn, { backgroundColor: colors.lime }]}
-            onPress={nextStep}
-            disabled={currentStep === 1 && !selectedGoal}
-          >
-            <Text style={[styles.navBtnText, { color: colors.background }]}>
-              {currentStep === 1 && !selectedGoal ? 'Select Goal' : 'Continue'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <Link href="/(tabs)" asChild>
-            <TouchableOpacity style={[styles.navBtn, styles.primaryBtn, { backgroundColor: colors.lime }]}>
-              <Text style={[styles.navBtnText, { color: colors.background }]}>Get Started</Text>
-            </TouchableOpacity>
-          </Link>
-        )}
-      </View>
+          {step === 'auth' && (
+            <View style={s.stepWrap}>
+              <Text style={s.heading}>{authMode === 'signup' ? 'Create Account' : 'Welcome Back'}</Text>
+              <Text style={s.sub}>{authMode === 'signup' ? 'Sign up to get started' : 'Sign in to continue'}</Text>
+              <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+              {authError ? <Text style={s.error}>{authError}</Text> : null}
+              <Btn label={authMode === 'signup' ? 'Sign Up' : 'Sign In'} onPress={doAuth} loading={loading} />
+              <TouchableOpacity onPress={() => { setAuthMode(m => m === 'signup' ? 'signin' : 'signup'); setAuthError(''); }}>
+                <Text style={s.link}>
+                  {authMode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'personal' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>About You</Text>
+              <Text style={s.sub}>Help us personalize your experience</Text>
+              <Field label="Name" value={draft.name} onChangeText={v => upd({ name: v })} />
+              <Field
+                label="Age"
+                value={draft.age?.toString() ?? ''}
+                onChangeText={v => upd({ age: v ? (parseInt(v) || null) : null })}
+                keyboardType="number-pad"
+              />
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'body' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Your Body</Text>
+              <Text style={s.sub}>Used to calculate your energy needs</Text>
+              <Field
+                label="Height (cm)"
+                value={draft.height_cm?.toString() ?? ''}
+                onChangeText={v => upd({ height_cm: v ? (parseFloat(v) || null) : null })}
+                keyboardType="decimal-pad"
+              />
+              <Field
+                label="Weight (kg)"
+                value={draft.weight_kg?.toString() ?? ''}
+                onChangeText={v => upd({ weight_kg: v ? (parseFloat(v) || null) : null })}
+                keyboardType="decimal-pad"
+              />
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'goal' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Your Goal</Text>
+              <Text style={s.sub}>What are you trying to achieve?</Text>
+              {(
+                [
+                  { id: 'lose', label: 'Lose Weight', desc: '~300 kcal deficit per day' },
+                  { id: 'maintain', label: 'Maintain Weight', desc: 'Eat at your TDEE' },
+                  { id: 'gain', label: 'Gain Weight', desc: '~300 kcal surplus per day' },
+                ] as const
+              ).map(opt => (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[s.optCard, draft.goal === opt.id && s.optCardActive]}
+                  onPress={() => upd({ goal: opt.id })}
+                >
+                  <Text style={[s.optLabel, draft.goal === opt.id && s.optLabelActive]}>{opt.label}</Text>
+                  <Text style={s.optDesc}>{opt.desc}</Text>
+                </TouchableOpacity>
+              ))}
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'activity' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Activity Level</Text>
+              <Text style={s.sub}>How active are you on a typical week?</Text>
+              {(
+                [
+                  { id: 'sedentary', label: 'Sedentary', desc: 'Little or no exercise' },
+                  { id: 'light', label: 'Light', desc: 'Exercise 1–3 days/week' },
+                  { id: 'moderate', label: 'Moderate', desc: 'Exercise 3–5 days/week' },
+                  { id: 'active', label: 'Active', desc: 'Hard exercise 6–7 days/week' },
+                  { id: 'very_active', label: 'Very Active', desc: 'Very hard exercise or physical job' },
+                ] as const
+              ).map(opt => (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[s.optCard, draft.activity_level === opt.id && s.optCardActive]}
+                  onPress={() => upd({ activity_level: opt.id })}
+                >
+                  <Text style={[s.optLabel, draft.activity_level === opt.id && s.optLabelActive]}>{opt.label}</Text>
+                  <Text style={s.optDesc}>{opt.desc}</Text>
+                </TouchableOpacity>
+              ))}
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'nutrition' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Nutrition Goals</Text>
+              <Text style={s.sub}>Fine-tune your daily targets</Text>
+              {(draft.height_cm && draft.weight_kg && draft.age) ? (
+                <View style={s.hintBox}>
+                  <Text style={s.hintText}>Estimated TDEE: {calcRecommended(draft)} kcal/day</Text>
+                </View>
+              ) : null}
+              <Field
+                label="Daily Calories (kcal)"
+                value={draft.daily_calories.toString()}
+                onChangeText={v => upd({ daily_calories: v ? (parseInt(v) || 2000) : 2000 })}
+                keyboardType="number-pad"
+              />
+              <Field
+                label="Food Preferences"
+                value={draft.preferences}
+                onChangeText={v => upd({ preferences: v })}
+                placeholder="e.g. Mediterranean, low-carb…"
+                multiline
+              />
+              <Field
+                label="Dietary Restrictions"
+                value={draft.dietary_restrictions}
+                onChangeText={v => upd({ dietary_restrictions: v })}
+                placeholder="e.g. gluten-free, nut allergy…"
+                multiline
+              />
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'budget' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Weekly Budget</Text>
+              <Text style={s.sub}>How much do you spend on groceries per week?</Text>
+              <View style={s.quickRow}>
+                {[50, 80, 100, 150].map(v => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[s.quickBtn, draft.weekly_budget_eur === v && s.quickBtnActive]}
+                    onPress={() => upd({ weekly_budget_eur: v })}
+                  >
+                    <Text style={[s.quickBtnText, draft.weekly_budget_eur === v && s.quickBtnTextActive]}>€{v}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Field
+                label="Or enter a custom amount (€)"
+                value={draft.weekly_budget_eur.toString()}
+                onChangeText={v => upd({ weekly_budget_eur: v ? (parseFloat(v) || 80) : 80 })}
+                keyboardType="decimal-pad"
+              />
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
+          {step === 'done' && (
+            <View style={s.stepWrap}>
+              <Text style={s.bigEmoji}>🎉</Text>
+              <Text style={s.heading}>You're all set!</Text>
+              <Text style={s.sub}>Your profile is ready</Text>
+              <Text style={s.body}>
+                We'll generate your first personalized weekly meal plan based on your goals and preferences.
+              </Text>
+              <Btn label="Start Tracking" onPress={doFinish} loading={loading} />
+            </View>
+          )}
+
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingTop: 20,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  progressBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  scrollView: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  stepContent: {
+// ─── Shared components ───────────────────────────────────────────────────────
+
+function Btn({ label, onPress, loading }: { label: string; onPress: () => void; loading?: boolean }) {
+  return (
+    <TouchableOpacity style={s.btn} onPress={onPress} disabled={loading}>
+      {loading
+        ? <ActivityIndicator color={C.background} />
+        : <Text style={s.btnText}>{label}</Text>}
+    </TouchableOpacity>
+  );
+}
+
+function BackBtn({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity style={s.backBtn} onPress={onPress}>
+      <Text style={s.backBtnText}>← Back</Text>
+    </TouchableOpacity>
+  );
+}
+
+function Field({
+  label, value, onChangeText, keyboardType, autoCapitalize, secureTextEntry, placeholder, multiline,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  keyboardType?: any;
+  autoCapitalize?: any;
+  secureTextEntry?: boolean;
+  placeholder?: string;
+  multiline?: boolean;
+}) {
+  return (
+    <View style={s.field}>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <TextInput
+        style={[s.input, multiline && s.inputMulti]}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType ?? 'default'}
+        autoCapitalize={autoCapitalize ?? 'sentences'}
+        secureTextEntry={secureTextEntry}
+        placeholder={placeholder ?? ''}
+        placeholderTextColor={C.text3}
+        multiline={multiline}
+        numberOfLines={multiline ? 3 : 1}
+      />
+    </View>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: C.background },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 48 },
+
+  progressWrap: { flexDirection: 'row', alignItems: 'center', paddingTop: 16, marginBottom: 36, gap: 12 },
+  progressTrack: { flex: 1, height: 4, backgroundColor: C.surface3, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: C.lime, borderRadius: 2 },
+  progressLabel: { fontSize: 12, color: C.text3, minWidth: 32, textAlign: 'right' },
+
+  stepWrap: { paddingTop: 24 },
+
+  bigEmoji: { fontSize: 64, textAlign: 'center', marginBottom: 20 },
+  heading: { fontSize: 30, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 8 },
+  sub: { fontSize: 15, color: C.text2, textAlign: 'center', marginBottom: 28 },
+  body: { fontSize: 15, color: C.text2, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+
+  btn: {
+    backgroundColor: C.lime,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 40,
+    marginTop: 24,
   },
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
+  btnText: { fontSize: 16, fontWeight: '700', color: C.background },
+
+  backBtn: { marginBottom: 12 },
+  backBtnText: { fontSize: 14, color: C.text3 },
+
+  error: { fontSize: 13, color: C.red, marginBottom: 8, textAlign: 'center' },
+  link: { fontSize: 14, color: C.lime, textAlign: 'center', marginTop: 18 },
+
+  field: { marginBottom: 16 },
+  fieldLabel: {
+    fontSize: 11, color: C.text3, marginBottom: 6,
+    letterSpacing: 0.8, textTransform: 'uppercase',
   },
-  stepSubtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  stepDescription: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-    maxWidth: 300,
-  },
-  goalsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 12,
-    marginTop: 20,
-  },
-  goalPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
+  input: {
+    backgroundColor: C.surface2,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    minWidth: 140,
-  },
-  goalIcon: {
-    fontSize: 20,
-  },
-  goalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  plansContainer: {
-    width: '100%',
-    gap: 16,
-    marginTop: 20,
-  },
-  planCard: {
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -10,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-  },
-  popularText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  planName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  planPrice: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  planPeriod: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  planSavings: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    paddingTop: 20,
-  },
-  navBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryBtn: {
-    borderWidth: 0,
-  },
-  navBtnText: {
     fontSize: 16,
-    fontWeight: '600',
+    color: C.text,
+    borderWidth: 1,
+    borderColor: C.border,
   },
+  inputMulti: { height: 80, textAlignVertical: 'top', paddingTop: 14 },
+
+  optCard: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  optCardActive: { borderColor: C.lime, backgroundColor: C.limeDim },
+  optLabel: { fontSize: 16, fontWeight: '600', color: C.text, marginBottom: 2 },
+  optLabelActive: { color: C.lime },
+  optDesc: { fontSize: 13, color: C.text3 },
+
+  hintBox: {
+    backgroundColor: C.limeDim2,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: C.limeDim,
+  },
+  hintText: { fontSize: 14, color: C.lime, textAlign: 'center', fontWeight: '600' },
+
+  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  quickBtn: {
+    flex: 1,
+    backgroundColor: C.surface2,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  quickBtnActive: { backgroundColor: C.limeDim, borderColor: C.lime },
+  quickBtnText: { fontSize: 15, fontWeight: '600', color: C.text2 },
+  quickBtnTextActive: { color: C.lime },
 });

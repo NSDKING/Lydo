@@ -1,15 +1,39 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
 import { MenuProvider } from '@/context/MenuContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        router.replace('/onboarding');
+      } else {
+        setReady(true);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        router.replace('/onboarding');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!ready) return <View style={{ flex: 1, backgroundColor: '#080808' }} />;
 
   return (
     <ProfileProvider>
