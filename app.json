@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "9",
+      "buildNumber": "11",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",
@@ -34,6 +34,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

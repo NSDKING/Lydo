@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PROFILE, UserProfile } from '@/context/ProfileContext';
 import { Colors } from '@/constants/theme';
@@ -26,9 +27,6 @@ function calcRecommended(p: UserProfile): number {
 export default function Onboarding() {
   const router = useRouter();
   const [idx, setIdx] = useState(0);
-  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -48,27 +46,43 @@ export default function Onboarding() {
     setIdx(i => i + 1);
   };
 
-  async function doAuth() {
+  async function doAppleAuth() {
     setAuthError('');
     setLoading(true);
     try {
-      if (authMode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email: email.trim(), password });
-        if (error) throw error;
-        next();
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
-        const uid = data.session?.user?.id;
-        if (uid) {
-          const { data: prof } = await supabase
-            .from('user_profiles').select('user_id').eq('user_id', uid).single();
-          if (prof) { router.replace('/(tabs)'); return; }
-        }
-        next();
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) throw new Error('No identity token from Apple');
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+      if (error) throw error;
+
+      const uid = data.session?.user?.id;
+      if (uid) {
+        // Pre-fill name from Apple on first sign-in (Apple only provides it once)
+        const given = credential.fullName?.givenName ?? '';
+        const family = credential.fullName?.familyName ?? '';
+        const fullName = `${given} ${family}`.trim();
+        if (fullName) upd({ name: fullName });
+
+        // If profile already exists, go straight to app
+        const { data: prof } = await supabase
+          .from('user_profiles').select('user_id').eq('user_id', uid).single();
+        if (prof) { router.replace('/(tabs)'); return; }
       }
+
+      next(); // New user — continue to profile setup
     } catch (e: any) {
-      setAuthError(e.message ?? 'Authentication failed');
+      if (e.code === 'ERR_REQUEST_CANCELED') return; // User dismissed the sheet
+      setAuthError(e.message ?? 'Sign in failed');
     } finally {
       setLoading(false);
     }
@@ -106,7 +120,7 @@ export default function Onboarding() {
           {step === 'welcome' && (
             <View style={s.stepWrap}>
               <Text style={s.bigEmoji}>🥗</Text>
-              <Text style={s.heading}>Mako</Text>
+              <Text style={s.heading}>Lydo</Text>
               <Text style={s.sub}>Your AI-powered nutrition companion</Text>
               <Text style={s.body}>
                 Get personalized weekly meal plans, track your calories, and shop smart at Lidl.
@@ -117,17 +131,28 @@ export default function Onboarding() {
 
           {step === 'auth' && (
             <View style={s.stepWrap}>
-              <Text style={s.heading}>{authMode === 'signup' ? 'Create Account' : 'Welcome Back'}</Text>
-              <Text style={s.sub}>{authMode === 'signup' ? 'Sign up to get started' : 'Sign in to continue'}</Text>
-              <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-              <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+              <Text style={s.heading}>Welcome</Text>
+              <Text style={s.sub}>Sign in to get started</Text>
+
               {authError ? <Text style={s.error}>{authError}</Text> : null}
-              <Btn label={authMode === 'signup' ? 'Sign Up' : 'Sign In'} onPress={doAuth} loading={loading} />
-              <TouchableOpacity onPress={() => { setAuthMode(m => m === 'signup' ? 'signin' : 'signup'); setAuthError(''); }}>
-                <Text style={s.link}>
-                  {authMode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-                </Text>
-              </TouchableOpacity>
+
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                cornerRadius={14}
+                style={s.appleBtn}
+                onPress={doAppleAuth}
+              />
+
+              {loading && (
+                <View style={s.loadingRow}>
+                  <ActivityIndicator color={C.lime} />
+                </View>
+              )}
+
+              <Text style={s.privacyNote}>
+                Your Apple ID is used only for authentication. We never see your password.
+              </Text>
             </View>
           )}
 
@@ -368,6 +393,20 @@ const s = StyleSheet.create({
   sub: { fontSize: 15, color: C.text2, textAlign: 'center', marginBottom: 28 },
   body: { fontSize: 15, color: C.text2, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
 
+  appleBtn: {
+    width: '100%',
+    height: 56,
+    marginTop: 8,
+  },
+  loadingRow: { alignItems: 'center', marginTop: 20 },
+  privacyNote: {
+    fontSize: 12,
+    color: C.text3,
+    textAlign: 'center',
+    marginTop: 24,
+    lineHeight: 18,
+  },
+
   btn: {
     backgroundColor: C.lime,
     borderRadius: 14,
@@ -381,7 +420,6 @@ const s = StyleSheet.create({
   backBtnText: { fontSize: 14, color: C.text3 },
 
   error: { fontSize: 13, color: C.red, marginBottom: 8, textAlign: 'center' },
-  link: { fontSize: 14, color: C.lime, textAlign: 'center', marginTop: 18 },
 
   field: { marginBottom: 16 },
   fieldLabel: {

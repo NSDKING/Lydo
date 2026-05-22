@@ -75,17 +75,6 @@ async function post<T>(path: string, body: unknown, timeoutMs = 180_000): Promis
   }
 }
 
-async function get<T>(path: string, timeoutMs = 15_000): Promise<T> {
-  const { signal, clear } = timeout(timeoutMs);
-  try {
-    const res = await fetch(`${API_URL}${path}`, { signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json() as Promise<T>;
-  } finally {
-    clear();
-  }
-}
-
 // ─── Menu ─────────────────────────────────────────────────────────────────────
 
 export function getWeekKey(date = new Date()): string {
@@ -99,8 +88,13 @@ export function getWeekKey(date = new Date()): string {
 
 export async function fetchWeeklyPlan(weekKey: string): Promise<MenuPlan | null> {
   try {
-    const data = await get<{ plan: MenuPlan }>(`/menu/week/${weekKey}`, 10_000);
-    return data.plan ?? null;
+    const { data } = await supabase
+      .from('weekly_plans')
+      .select('plan_text')
+      .eq('week_key', weekKey)
+      .maybeSingle();
+    if (!data?.plan_text) return null;
+    return JSON.parse(data.plan_text) as MenuPlan;
   } catch {
     return null;
   }
@@ -112,6 +106,7 @@ export async function generateMenuPlan(params?: {
   targetCalories?: number;
   days?: number;
   mealsPerDay?: number;
+  userId?: string;
 }): Promise<MenuPlan> {
   const data = await post<{ plan: MenuPlan }>('/menu/generate', {
     days: params?.days ?? 7,
@@ -119,6 +114,7 @@ export async function generateMenuPlan(params?: {
     targetCalories: params?.targetCalories ?? 2000,
     preferences: params?.preferences ?? '',
     dietaryRestrictions: params?.dietaryRestrictions ?? '',
+    userId: params?.userId,
   });
   return data.plan;
 }
@@ -187,19 +183,26 @@ export interface UserRecipe {
 }
 
 export async function fetchUserRecipes(): Promise<UserRecipe[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return [];
   const { data } = await supabase
     .from('user_recipes')
     .select('*')
+    .eq('user_id', session.user.id)
     .order('created_at', { ascending: false });
   return (data as UserRecipe[] | null) ?? [];
 }
 
 export async function saveUserRecipe(
-  recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'>
+  recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'>,
+  userId?: string,
 ): Promise<string> {
+  const uid = userId ?? (await supabase.auth.getSession()).data.session?.user.id;
+  if (!uid) throw new Error('Not authenticated');
   const { data, error } = await supabase
     .from('user_recipes')
     .insert({
+      user_id: uid,
       name: recipe.name,
       calories: recipe.calories,
       protein_g: recipe.protein_g,
@@ -215,5 +218,7 @@ export async function saveUserRecipe(
 }
 
 export async function deleteUserRecipe(id: string): Promise<void> {
-  await supabase.from('user_recipes').delete().eq('id', id);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  await supabase.from('user_recipes').delete().eq('id', id).eq('user_id', session.user.id);
 }

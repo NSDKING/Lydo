@@ -96,6 +96,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
       const weekKey = getWeekKey();
 
       if (!forceRegenerate) {
@@ -115,16 +117,17 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         targetCalories: profile.daily_calories,
         preferences: profile.preferences || undefined,
         dietaryRestrictions: profile.dietary_restrictions || undefined,
+        userId,
       });
       setPlan(fresh);
-      setPlanExistsInDB(true);       // will be persisted by the backend after this
+      setPlanExistsInDB(true);
       setLoggedMeals({});
       setLockedMeals({});
       setMealOverrides({});
       // Fire-and-forget: save all generated meals to user_recipes
       fresh.days.forEach(day =>
         day.meals.forEach(meal =>
-          saveUserRecipe(meal).catch(() => {})
+          saveUserRecipe(meal, userId).catch(() => {})
         )
       );
     } catch (err) {
@@ -132,7 +135,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [profile.daily_calories, profile.preferences, profile.dietary_restrictions]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -234,6 +237,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   const persistCurrentPlan = useCallback(async () => {
     if (!plan) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
     const weekKey = getWeekKey();
     const effectiveDays = plan.days.map(d => {
       const overrides = mealOverrides[d.day] ?? {};
@@ -244,7 +249,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     });
     await supabase
       .from('weekly_plans')
-      .upsert({ week_key: weekKey, plan_text: JSON.stringify({ days: effectiveDays }), created_at: new Date().toISOString() });
+      .upsert({ week_key: weekKey, user_id: userId, plan_text: JSON.stringify({ days: effectiveDays }), created_at: new Date().toISOString() });
   }, [plan, mealOverrides]);
 
   // ── Add TikTok meal ────────────────────────────────────────────────────────
