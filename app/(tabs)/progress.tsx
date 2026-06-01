@@ -1,9 +1,11 @@
 import { Colors } from '@/constants/theme';
 import { DEFAULT_PROFILE, useProfile, UserProfile } from '@/context/ProfileContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -128,6 +130,34 @@ export default function ProfileScreen() {
     await saveProfile(draft);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'You will be returned to the login screen.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+    ]);
+  };
+
+  const handleResetOnboarding = () => {
+    Alert.alert(
+      'Reset & Redo Onboarding',
+      'This deletes your profile data and signs you out. Your meal plans and recipes are kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from('user_profiles').delete().eq('user_id', user.id);
+            }
+            await supabase.auth.signOut();
+          },
+        },
+      ],
+    );
   };
 
   const num = (v: number | null) => (v == null ? '' : String(v));
@@ -269,6 +299,20 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Account */}
+          <SectionHeader title="Account" colors={colors} />
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, gap: 0 }]}>
+            <TouchableOpacity
+              style={[styles.accountBtn, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              onPress={handleSignOut}
+            >
+              <Text style={[styles.accountBtnText, { color: colors.text2 }]}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.accountBtn} onPress={handleResetOnboarding}>
+              <Text style={[styles.accountBtnText, { color: colors.orange }]}>Reset & Redo Onboarding</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={{ height: 60 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -306,4 +350,6 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 14 },
   pill: { borderWidth: 1, borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
   pillText: { fontSize: 13, fontWeight: '600' },
+  accountBtn: { paddingVertical: 16, paddingHorizontal: 18 },
+  accountBtnText: { fontSize: 15, fontWeight: '600' },
 });
