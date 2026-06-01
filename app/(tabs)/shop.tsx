@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useProfile } from '@/context/ProfileContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LidlPromoDetail, fetchLidlCatalog } from '@/services/api';
@@ -96,6 +97,8 @@ export default function ShopScreen() {
   const colorScheme = useColorScheme();
   const C = Colors[colorScheme ?? 'dark'];
   const { plan, isLoading: planLoading } = useMenu();
+  const { profile } = useProfile();
+  const budget = profile.weekly_budget_eur;
 
   const [checked, setChecked]       = useState<Set<string>>(new Set());
   const [catalog, setCatalog]       = useState<LidlPromoDetail[]>([]);
@@ -145,16 +148,25 @@ export default function ShopScreen() {
     return map;
   }, [plan, catalog]);
 
-  const allItems   = useMemo(() => [...aisleMap.values()].flat(), [aisleMap]);
-  const doneCount  = allItems.filter(i => checked.has(i.id)).length;
-  const total      = allItems.length;
-  const pct        = total ? Math.round((doneCount / total) * 100) : 0;
-  const lidlCount  = allItems.filter(i => i.isLidl || i.lidlDeal).length;
-  const savings    = useMemo(() => allItems.reduce((s, i) => {
+  const allItems      = useMemo(() => [...aisleMap.values()].flat(), [aisleMap]);
+  const doneCount     = allItems.filter(i => checked.has(i.id)).length;
+  const total         = allItems.length;
+  const pct           = total ? Math.round((doneCount / total) * 100) : 0;
+  const lidlCount     = allItems.filter(i => i.isLidl || i.lidlDeal).length;
+  const savings       = useMemo(() => allItems.reduce((s, i) => {
     if (!i.price || !i.old_price) return s;
     const c = parseFloat(i.price), o = parseFloat(i.old_price);
     return !isNaN(c) && !isNaN(o) ? s + (o - c) : s;
   }, 0), [allItems]);
+
+  // Running bill: sum of prices for checked items that have a known price
+  const checkedTotal  = useMemo(() => allItems.reduce((s, i) => {
+    if (!checked.has(i.id) || !i.price) return s;
+    const v = parseFloat(i.price);
+    return isNaN(v) ? s : s + v;
+  }, 0), [allItems, checked]);
+  const budgetPct     = budget > 0 ? Math.min(100, (checkedTotal / budget) * 100) : 0;
+  const overBudget    = budget > 0 && checkedTotal > budget;
 
   const isLoading = planLoading || catalogLoading;
 
@@ -281,6 +293,30 @@ export default function ShopScreen() {
             </View>
           )}
 
+          {/* Budget bar */}
+          {budget > 0 && (
+            <View style={[styles.budgetCard, { backgroundColor: C.surface, borderColor: overBudget ? `${C.orange}60` : C.border }]}>
+              <View style={styles.budgetRow}>
+                <Text style={[styles.budgetLabel, { color: C.text3 }]}>Weekly budget</Text>
+                <Text style={[styles.budgetAmount, { color: overBudget ? C.orange : C.text }]}>
+                  <Text style={{ color: overBudget ? C.orange : C.lime, fontWeight: '800' }}>€{checkedTotal.toFixed(2)}</Text>
+                  {'  /  '}€{budget.toFixed(0)}
+                </Text>
+              </View>
+              <View style={[styles.budgetTrack, { backgroundColor: C.surface2 }]}>
+                <View style={[styles.budgetFill, {
+                  width: `${budgetPct}%` as any,
+                  backgroundColor: overBudget ? C.orange : C.lime,
+                }]} />
+              </View>
+              {overBudget && (
+                <Text style={[styles.overBudgetText, { color: C.orange }]}>
+                  €{(checkedTotal - budget).toFixed(2)} over budget — uncheck some items
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Savings callout */}
           {savings > 0.01 && (
             <View style={[styles.savingsCard, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.2)' }]}>
@@ -383,7 +419,12 @@ export default function ShopScreen() {
               <View style={[styles.summaryBar, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <View style={styles.summaryLeft}>
                   <Text style={[styles.summaryCount, { color: C.text }]}>{doneCount}</Text>
-                  <Text style={[styles.summaryOf, { color: C.text3 }]}>  of {total} items checked</Text>
+                  <Text style={[styles.summaryOf, { color: C.text3 }]}>  of {total} items</Text>
+                  {checkedTotal > 0 && (
+                    <Text style={[styles.summaryOf, { color: C.lime, fontWeight: '700' }]}>
+                      {'  ·  '}€{checkedTotal.toFixed(2)}
+                    </Text>
+                  )}
                 </View>
                 {doneCount > 0 && (
                   <TouchableOpacity
@@ -445,6 +486,15 @@ const styles = StyleSheet.create({
 
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill:  { height: '100%', borderRadius: 3 },
+
+  // Budget bar
+  budgetCard:       { borderWidth: 1, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, gap: 10 },
+  budgetRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetLabel:      { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  budgetAmount:     { fontSize: 14 },
+  budgetTrack:      { height: 6, borderRadius: 3, overflow: 'hidden' },
+  budgetFill:       { height: '100%', borderRadius: 3 },
+  overBudgetText:   { fontSize: 12, fontWeight: '600' },
 
   // Savings card
   savingsCard:     { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 },
