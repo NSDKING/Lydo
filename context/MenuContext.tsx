@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import {
   DayPlan,
@@ -111,6 +112,11 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       // planExistsInDB is false — AI generation required
       setPlanExistsInDB(false);
+
+      // Load pantry so model can reuse what the user already has
+      const rawPantry = await AsyncStorage.getItem('lydo_pantry').catch(() => null);
+      const pantryItems: string[] = rawPantry ? JSON.parse(rawPantry) : [];
+
       const fresh = await generateMenuPlan({
         days: 7,
         mealsPerDay: 3,
@@ -118,6 +124,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         preferences: profile.preferences || undefined,
         dietaryRestrictions: profile.dietary_restrictions || undefined,
         userId,
+        weeklyBudget: profile.weekly_budget_eur,
+        pantryItems,
       });
       setPlan(fresh);
       setPlanExistsInDB(true);

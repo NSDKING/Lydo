@@ -1,9 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { useProfile } from '@/context/ProfileContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { LidlPromoDetail, fetchLidlCatalog } from '@/services/api';
-import React, { useEffect, useMemo, useState } from 'react';
+import { LidlPromoDetail, fetchLidlCatalog, getWeekKey } from '@/services/api';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -101,9 +102,37 @@ export default function ShopScreen() {
   const budget = profile.weekly_budget_eur;
 
   const [checked, setChecked]       = useState<Set<string>>(new Set());
+  const [pantry, setPantry]         = useState<Set<string>>(new Set()); // item names
   const [catalog, setCatalog]       = useState<LidlPromoDetail[]>([]);
   const [catalogLoading, setCL]     = useState(false);
   const [collapsed, setCollapsed]   = useState<Set<string>>(new Set());
+
+  const weekKey = getWeekKey();
+
+  // Load pantry + this week's checked state from AsyncStorage
+  useEffect(() => {
+    (async () => {
+      try {
+        const [p, c] = await Promise.all([
+          AsyncStorage.getItem('lydo_pantry'),
+          AsyncStorage.getItem(`lydo_checked_${weekKey}`),
+        ]);
+        if (p) setPantry(new Set(JSON.parse(p)));
+        if (c) setChecked(new Set(JSON.parse(c)));
+      } catch {}
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist pantry
+  useEffect(() => {
+    AsyncStorage.setItem('lydo_pantry', JSON.stringify([...pantry])).catch(() => {});
+  }, [pantry]);
+
+  // Persist checked (week-scoped)
+  useEffect(() => {
+    AsyncStorage.setItem(`lydo_checked_${weekKey}`, JSON.stringify([...checked])).catch(() => {});
+  }, [checked, weekKey]);
 
   useEffect(() => {
     if (!plan) return;
@@ -111,7 +140,26 @@ export default function ShopScreen() {
     fetchLidlCatalog().then(setCatalog).finally(() => setCL(false));
   }, [plan]);
 
-  const toggle   = (id: string)    => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Checking an item = buying it = add to pantry
+  const toggle = useCallback((id: string, name: string) => {
+    setChecked(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) {
+        n.delete(id);
+      } else {
+        n.add(id);
+        setPantry(p => new Set([...p, name]));
+      }
+      return n;
+    });
+  }, []);
+
+  // Mark item as finished = remove from pantry so it appears on next week's buy list
+  const markFinished = useCallback((name: string, id: string) => {
+    setPantry(p => { const n = new Set(p); n.delete(name); return n; });
+    setChecked(p => { const n = new Set(p); n.delete(id); return n; });
+  }, []);
+
   const collapse = (label: string) => setCollapsed(p => { const n = new Set(p); n.has(label) ? n.delete(label) : n.add(label); return n; });
 
   const aisleMap = useMemo((): Map<string, GroceryItem[]> => {
@@ -159,99 +207,133 @@ export default function ShopScreen() {
     return !isNaN(c) && !isNaN(o) ? s + (o - c) : s;
   }, 0), [allItems]);
 
-  // Running bill: sum of prices for checked items that have a known price
-  const checkedTotal  = useMemo(() => allItems.reduce((s, i) => {
-    if (!checked.has(i.id) || !i.price) return s;
+  // Items the user still needs to buy (not in pantry)
+  const toBuyItems    = useMemo(() => allItems.filter(i => !pantry.has(i.name)), [allItems, pantry]);
+  const pantryCount   = allItems.length - toBuyItems.length;
+
+  // Estimated total for the week (only items not already in pantry)
+  const estimatedCost = useMemo(() => toBuyItems.reduce((s, i) => {
+    if (!i.price) return s;
     const v = parseFloat(i.price);
     return isNaN(v) ? s : s + v;
-  }, 0), [allItems, checked]);
-  const budgetPct     = budget > 0 ? Math.min(100, (checkedTotal / budget) * 100) : 0;
-  const overBudget    = budget > 0 && checkedTotal > budget;
+  }, 0), [toBuyItems]);
+
+  // Running bill: sum of prices for items checked this session (being purchased now)
+  const checkedTotal  = useMemo(() => allItems.reduce((s, i) => {
+    if (!checked.has(i.id) || !i.price || pantry.has(i.name)) return s;
+    const v = parseFloat(i.price);
+    return isNaN(v) ? s : s + v;
+  }, 0), [allItems, checked, pantry]);
+
+  const budgetPct     = budget > 0 ? Math.min(100, (estimatedCost / budget) * 100) : 0;
+  const overBudget    = budget > 0 && estimatedCost > budget;
 
   const isLoading = planLoading || catalogLoading;
 
   const renderItem = (item: GroceryItem) => {
     const isChecked = checked.has(item.id);
+    const inPantry  = pantry.has(item.name);
+
     return (
-      <TouchableOpacity
-        key={item.id}
-        style={[
-          styles.itemRow,
-          {
-            backgroundColor: isChecked ? 'rgba(181,242,61,0.05)' : C.surface,
-            borderColor:     isChecked ? 'rgba(181,242,61,0.22)' : C.border,
-            borderLeftColor: isChecked ? C.lime : C.border,
-            borderLeftWidth: isChecked ? 3 : 1,
-          },
-        ]}
-        onPress={() => toggle(item.id)}
-        activeOpacity={0.75}
-      >
-        {/* Checkbox */}
-        <View style={[
-          styles.checkBox,
-          {
-            backgroundColor: isChecked ? C.lime : 'transparent',
-            borderColor:     isChecked ? C.lime : C.border2,
-          },
-        ]}>
-          {isChecked && <Text style={styles.checkMark}>✓</Text>}
-        </View>
+      <View key={item.id}>
+        <TouchableOpacity
+          style={[
+            styles.itemRow,
+            {
+              backgroundColor: inPantry  ? 'rgba(181,242,61,0.06)' :
+                               isChecked ? 'rgba(181,242,61,0.03)' : C.surface,
+              borderColor:     inPantry  ? 'rgba(181,242,61,0.35)' :
+                               isChecked ? 'rgba(181,242,61,0.22)' : C.border,
+              borderLeftColor: inPantry ? C.lime : isChecked ? C.lime : C.border,
+              borderLeftWidth: (inPantry || isChecked) ? 3 : 1,
+            },
+          ]}
+          onPress={() => toggle(item.id, item.name)}
+          activeOpacity={0.75}
+        >
+          {/* Checkbox */}
+          <View style={[
+            styles.checkBox,
+            {
+              backgroundColor: (isChecked || inPantry) ? C.lime : 'transparent',
+              borderColor:     (isChecked || inPantry) ? C.lime : C.border2,
+            },
+          ]}>
+            {(isChecked || inPantry) && <Text style={styles.checkMark}>✓</Text>}
+          </View>
 
-        {/* Product image */}
-        <View style={styles.thumbWrap}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
-          ) : (
-            <View style={[styles.thumbFallback, {
-              backgroundColor: item.isLidl ? C.limeDim : C.surface2,
-            }]}>
-              <Text style={styles.thumbEmoji}>
-                {AISLE_FALLBACK[item.aisle] ?? '🛒'}
-              </Text>
+          {/* Product image */}
+          <View style={styles.thumbWrap}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
+            ) : (
+              <View style={[styles.thumbFallback, {
+                backgroundColor: item.isLidl ? C.limeDim : C.surface2,
+              }]}>
+                <Text style={styles.thumbEmoji}>
+                  {AISLE_FALLBACK[item.aisle] ?? '🛒'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Name + price */}
+          <View style={[styles.itemBody, { opacity: (isChecked || inPantry) ? 0.55 : 1 }]}>
+            <Text
+              numberOfLines={2}
+              style={[
+                styles.itemName,
+                {
+                  color: C.text,
+                  textDecorationLine: isChecked ? 'line-through' : 'none',
+                },
+              ]}
+            >
+              {item.name}
+            </Text>
+            {inPantry && !isChecked && (
+              <Text style={[styles.haveLabel, { color: C.lime }]}>Already in pantry</Text>
+            )}
+            {item.price && !inPantry ? (
+              <View style={styles.priceRow}>
+                <Text style={[styles.price, { color: C.lime }]}>{item.price}€</Text>
+                {item.old_price && (
+                  <Text style={[styles.oldPrice, { color: C.text3 }]}>{item.old_price}€</Text>
+                )}
+              </View>
+            ) : null}
+          </View>
+
+          {/* Badge */}
+          {inPantry ? (
+            <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.35)' }]}>
+              <Text style={[styles.badgeText, { color: C.lime }]}>Have ✓</Text>
             </View>
-          )}
-        </View>
-
-        {/* Name + price */}
-        <View style={[styles.itemBody, { opacity: isChecked ? 0.42 : 1 }]}>
-          <Text
-            numberOfLines={2}
-            style={[
-              styles.itemName,
-              {
-                color: C.text,
-                textDecorationLine: isChecked ? 'line-through' : 'none',
-              },
-            ]}
-          >
-            {item.name}
-          </Text>
-          {item.price ? (
-            <View style={styles.priceRow}>
-              <Text style={[styles.price, { color: C.lime }]}>{item.price}€</Text>
-              {item.old_price && (
-                <Text style={[styles.oldPrice, { color: C.text3 }]}>{item.old_price}€</Text>
-              )}
+          ) : item.discount_percent ? (
+            <View style={[styles.badge, { backgroundColor: C.orangeDim, borderColor: `${C.orange}50` }]}>
+              <Text style={[styles.badgeText, { color: C.orange }]}>-{item.discount_percent}%</Text>
+            </View>
+          ) : item.isLidl ? (
+            <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
+              <Text style={[styles.badgeText, { color: C.lime }]}>LIDL</Text>
+            </View>
+          ) : item.lidlDeal ? (
+            <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
+              <Text style={[styles.badgeText, { color: C.lime }]}>🛒</Text>
             </View>
           ) : null}
-        </View>
+        </TouchableOpacity>
 
-        {/* Badge */}
-        {item.discount_percent ? (
-          <View style={[styles.badge, { backgroundColor: C.orangeDim, borderColor: `${C.orange}50` }]}>
-            <Text style={[styles.badgeText, { color: C.orange }]}>-{item.discount_percent}%</Text>
-          </View>
-        ) : item.isLidl ? (
-          <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
-            <Text style={[styles.badgeText, { color: C.lime }]}>LIDL</Text>
-          </View>
-        ) : item.lidlDeal ? (
-          <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.25)' }]}>
-            <Text style={[styles.badgeText, { color: C.lime }]}>🛒</Text>
-          </View>
-        ) : null}
-      </TouchableOpacity>
+        {/* Finished button — shown when item is in pantry */}
+        {inPantry && (
+          <TouchableOpacity
+            style={[styles.finishedBtn, { backgroundColor: C.surface2, borderColor: C.border2 }]}
+            onPress={() => markFinished(item.name, item.id)}
+          >
+            <Text style={[styles.finishedBtnText, { color: C.orange }]}>Used it up — remove from pantry</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -297,9 +379,12 @@ export default function ShopScreen() {
           {budget > 0 && (
             <View style={[styles.budgetCard, { backgroundColor: C.surface, borderColor: overBudget ? `${C.orange}60` : C.border }]}>
               <View style={styles.budgetRow}>
-                <Text style={[styles.budgetLabel, { color: C.text3 }]}>Weekly budget</Text>
+                <Text style={[styles.budgetLabel, { color: C.text3 }]}>
+                  {'Estimated spend'}
+                  {pantryCount > 0 ? ` · ${pantryCount} in pantry` : ''}
+                </Text>
                 <Text style={[styles.budgetAmount, { color: overBudget ? C.orange : C.text }]}>
-                  <Text style={{ color: overBudget ? C.orange : C.lime, fontWeight: '800' }}>€{checkedTotal.toFixed(2)}</Text>
+                  <Text style={{ color: overBudget ? C.orange : C.lime, fontWeight: '800' }}>€{estimatedCost.toFixed(2)}</Text>
                   {'  /  '}€{budget.toFixed(0)}
                 </Text>
               </View>
@@ -311,7 +396,7 @@ export default function ShopScreen() {
               </View>
               {overBudget && (
                 <Text style={[styles.overBudgetText, { color: C.orange }]}>
-                  €{(checkedTotal - budget).toFixed(2)} over budget — uncheck some items
+                  €{(estimatedCost - budget).toFixed(2)} over budget — the meal plan uses more than your weekly budget
                 </Text>
               )}
             </View>
@@ -486,6 +571,10 @@ const styles = StyleSheet.create({
 
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill:  { height: '100%', borderRadius: 3 },
+
+  haveLabel:        { fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  finishedBtn:      { marginTop: 2, marginBottom: 4, borderWidth: 1, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 14, alignItems: 'center' },
+  finishedBtnText:  { fontSize: 12, fontWeight: '600' },
 
   // Budget bar
   budgetCard:       { borderWidth: 1, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, gap: 10 },

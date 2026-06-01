@@ -110,6 +110,8 @@ export async function generateMenuPlan(params?: {
   days?: number;
   mealsPerDay?: number;
   userId?: string;
+  weeklyBudget?: number;
+  pantryItems?: string[];
 }): Promise<MenuPlan> {
   const data = await post<{ plan: MenuPlan }>('/menu/generate', {
     days: params?.days ?? 7,
@@ -118,6 +120,8 @@ export async function generateMenuPlan(params?: {
     preferences: params?.preferences ?? '',
     dietaryRestrictions: params?.dietaryRestrictions ?? '',
     userId: params?.userId,
+    weeklyBudget: params?.weeklyBudget,
+    pantryItems: params?.pantryItems ?? [],
   });
   return data.plan;
 }
