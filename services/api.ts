@@ -88,10 +88,13 @@ export function getWeekKey(date = new Date()): string {
 
 export async function fetchWeeklyPlan(weekKey: string): Promise<MenuPlan | null> {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
     const { data } = await supabase
       .from('weekly_plans')
       .select('plan_text')
       .eq('week_key', weekKey)
+      .eq('user_id', session.user.id)
       .maybeSingle();
     if (!data?.plan_text) return null;
     return JSON.parse(data.plan_text) as MenuPlan;
