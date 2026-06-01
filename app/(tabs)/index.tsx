@@ -2,7 +2,7 @@ import { AddFoodModal } from '@/components/AddFoodModal';
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { AdaptedIngredient, adaptRecipeWithLidl, Meal, saveUserRecipe } from '@/services/api';
+import { AdaptedIngredient, adaptRecipeWithLidl, fetchMealSteps, Meal, saveUserRecipe } from '@/services/api';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +25,18 @@ export default function TodayScreen() {
   const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros, extraMeals, removeExtraMeal } = useMenu();
 
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
+  const [stepsCache, setStepsCache] = useState<Record<string, string[]>>({});
+  const [stepsLoadingName, setStepsLoadingName] = useState<string | null>(null);
+
+  const openMeal = (meal: Meal) => {
+    setSelectedMeal(meal);
+    if (!stepsCache[meal.name] && stepsLoadingName !== meal.name) {
+      setStepsLoadingName(meal.name);
+      fetchMealSteps(meal.name, meal.ingredients).then(steps => {
+        setStepsCache(c => ({ ...c, [meal.name]: steps }));
+      }).finally(() => setStepsLoadingName(null));
+    }
+  };
   const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
@@ -136,7 +148,7 @@ export default function TodayScreen() {
                     borderWidth: isLogged ? 1 : 1.5,
                   },
                 ]}
-                onPress={() => setSelectedMeal(meal)}
+                onPress={() => openMeal(meal)}
               >
                 <View style={styles.mealRowTop}>
                   <View style={[styles.mealDot, { backgroundColor: dotColor }]} />
@@ -204,7 +216,7 @@ export default function TodayScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
-            {selectedMeal && <RecipeSheet meal={selectedMeal} colors={colors} onClose={() => setSelectedMeal(null)} />}
+            {selectedMeal && <RecipeSheet meal={selectedMeal} colors={colors} onClose={() => setSelectedMeal(null)} steps={stepsCache[selectedMeal.name]} stepsLoading={stepsLoadingName === selectedMeal.name} />}
           </View>
         </View>
       </Modal>
@@ -212,7 +224,7 @@ export default function TodayScreen() {
   );
 }
 
-function RecipeSheet({ meal, colors, onClose }: { meal: Meal; colors: any; onClose: () => void }) {
+function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Meal; colors: any; onClose: () => void; steps?: string[]; stepsLoading?: boolean }) {
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [cheapening, setCheapening] = useState(false);
@@ -310,14 +322,17 @@ function RecipeSheet({ meal, colors, onClose }: { meal: Meal; colors: any; onClo
         {/* Steps */}
         <View style={styles.sheetSection}>
           <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>RECIPE</Text>
-          {(meal.steps ?? []).map((step, i) => (
-              <View key={i} style={[styles.stepRow, { borderBottomColor: colors.border }]}>
-                <View style={[styles.stepNumber, { backgroundColor: colors.surface3 }]}>
-                  <Text style={[styles.stepNumberText, { color: colors.lime }]}>{i + 1}</Text>
+          {stepsLoading
+            ? <ActivityIndicator color={colors.lime} style={{ marginVertical: 8 }} />
+            : (steps ?? []).map((step, i) => (
+                <View key={i} style={[styles.stepRow, { borderBottomColor: colors.border }]}>
+                  <View style={[styles.stepNumber, { backgroundColor: colors.surface3 }]}>
+                    <Text style={[styles.stepNumberText, { color: colors.lime }]}>{i + 1}</Text>
+                  </View>
+                  <Text style={[styles.stepText, { color: colors.text }]}>{step}</Text>
                 </View>
-                <Text style={[styles.stepText, { color: colors.text }]}>{step}</Text>
-              </View>
-            ))}
+              ))
+          }
         </View>
 
         {/* Cheapen with Lidl */}

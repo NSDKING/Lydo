@@ -6,22 +6,39 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import AppleHealthKit, { HealthKitPermissions } from 'react-native-health';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PROFILE, UserProfile } from '@/context/ProfileContext';
 import { Colors } from '@/constants/theme';
 
+const HEALTH_PERMISSIONS: HealthKitPermissions = {
+  permissions: {
+    read: [
+      AppleHealthKit.Constants.Permissions.Height,
+      AppleHealthKit.Constants.Permissions.Weight,
+      AppleHealthKit.Constants.Permissions.StepCount,
+    ],
+    write: [],
+  },
+};
+
 const C = Colors.dark;
 
-type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'activity' | 'nutrition' | 'budget' | 'done';
-const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'activity', 'nutrition', 'budget', 'done'];
-const TOTAL_PROGRESS = STEPS.length - 2; // 7: auth → budget
+type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'deficit' | 'activity' | 'nutrition' | 'budget' | 'done';
+const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'deficit', 'activity', 'nutrition', 'budget', 'done'];
+const TOTAL_PROGRESS = STEPS.length - 2; // 8: auth → budget
 
-function calcRecommended(p: UserProfile): number {
+function calcTDEE(p: UserProfile): number {
   if (!p.weight_kg || !p.height_cm || !p.age) return 2000;
   const bmr = 10 * p.weight_kg + 6.25 * p.height_cm - 5 * p.age + 5;
   const mult = ({ sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 } as Record<string, number>)[p.activity_level] ?? 1.55;
-  const delta = ({ lose: -300, maintain: 0, gain: 300 } as Record<string, number>)[p.goal] ?? 0;
-  return Math.round(bmr * mult) + delta;
+  return Math.round(bmr * mult);
+}
+
+function calcRecommended(p: UserProfile, deficitKcal: number): number {
+  const tdee = calcTDEE(p);
+  const delta = p.goal === 'gain' ? 300 : p.goal === 'lose' ? -deficitKcal : 0;
+  return tdee + delta;
 }
 
 export default function Onboarding() {
@@ -30,6 +47,42 @@ export default function Onboarding() {
   const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [deficitKcal, setDeficitKcal] = useState(500);
+  const [customDeficit, setCustomDeficit] = useState('');
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  const importFromHealth = () => {
+    if (Platform.OS !== 'ios') return;
+    setHealthLoading(true);
+    AppleHealthKit.initHealthKit(HEALTH_PERMISSIONS, (err) => {
+      if (err) { setHealthLoading(false); return; }
+
+      AppleHealthKit.getLatestHeight({}, (hErr, height) => {
+        if (!hErr && height?.value) upd({ height_cm: Math.round(height.value * 2.54) });
+      });
+
+      AppleHealthKit.getLatestWeight({ unit: 'gram' as any }, (wErr, weight) => {
+        if (!wErr && weight?.value) upd({ weight_kg: parseFloat((weight.value / 1000).toFixed(1)) });
+      });
+
+      // Estimate activity level from average daily steps over the last 7 days
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      AppleHealthKit.getDailyStepCountSamples(
+        { startDate: weekAgo, endDate: new Date().toISOString() },
+        (sErr, samples) => {
+          setHealthLoading(false);
+          if (sErr || !samples?.length) return;
+          const avg = samples.reduce((s, r) => s + r.value, 0) / samples.length;
+          const level =
+            avg < 5000  ? 'sedentary' :
+            avg < 7500  ? 'light'     :
+            avg < 10000 ? 'moderate'  :
+            avg < 12500 ? 'active'    : 'very_active';
+          upd({ activity_level: level as UserProfile['activity_level'] });
+        },
+      );
+    });
+  };
 
   const step = STEPS[idx];
   const isProgressStep = step !== 'welcome' && step !== 'done';
@@ -37,10 +90,22 @@ export default function Onboarding() {
   const progressPct = isProgressStep ? progressIdx / TOTAL_PROGRESS : step === 'done' ? 1 : 0;
 
   const upd = (f: Partial<UserProfile>) => setDraft(p => ({ ...p, ...f }));
-  const back = () => setIdx(i => i - 1);
+
+  const back = () => {
+    if (step === 'activity' && draft.goal !== 'lose') {
+      setIdx(i => i - 2); // skip past deficit step
+      return;
+    }
+    setIdx(i => i - 1);
+  };
+
   const next = () => {
+    if (step === 'goal' && draft.goal !== 'lose') {
+      setIdx(i => i + 2); // skip deficit step
+      return;
+    }
     if (step === 'activity') {
-      const rec = calcRecommended(draft);
+      const rec = calcRecommended(draft, deficitKcal);
       setDraft(p => ({ ...p, daily_calories: rec }));
     }
     setIdx(i => i + 1);
@@ -177,6 +242,23 @@ export default function Onboarding() {
               <BackBtn onPress={back} />
               <Text style={s.heading}>Your Body</Text>
               <Text style={s.sub}>Used to calculate your energy needs</Text>
+
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[s.healthBtn, healthLoading && { opacity: 0.6 }]}
+                  onPress={importFromHealth}
+                  disabled={healthLoading}
+                >
+                  {healthLoading
+                    ? <ActivityIndicator color={C.lime} size="small" style={{ marginRight: 8 }} />
+                    : <Text style={s.healthBtnIcon}>❤️</Text>
+                  }
+                  <Text style={s.healthBtnText}>
+                    {healthLoading ? 'Reading from Health…' : 'Import from Apple Health'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <Field
                 label="Height (cm)"
                 value={draft.height_cm?.toString() ?? ''}
@@ -218,6 +300,50 @@ export default function Onboarding() {
             </View>
           )}
 
+          {step === 'deficit' && (
+            <View style={s.stepWrap}>
+              <BackBtn onPress={back} />
+              <Text style={s.heading}>Calorie Deficit</Text>
+              <Text style={s.sub}>How aggressive do you want your cut?</Text>
+              {(
+                [
+                  { kcal: 250, label: 'Small Deficit',  desc: '−250 kcal/day · Slow, sustainable loss (~0.25 kg/week)' },
+                  { kcal: 500, label: 'Medium Deficit', desc: '−500 kcal/day · Steady loss (~0.5 kg/week)' },
+                  { kcal: 750, label: 'Big Deficit',    desc: '−750 kcal/day · Faster loss (~0.75 kg/week)' },
+                ] as const
+              ).map(opt => (
+                <TouchableOpacity
+                  key={opt.kcal}
+                  style={[s.optCard, deficitKcal === opt.kcal && customDeficit === '' && s.optCardActive]}
+                  onPress={() => { setDeficitKcal(opt.kcal); setCustomDeficit(''); }}
+                >
+                  <Text style={[s.optLabel, deficitKcal === opt.kcal && customDeficit === '' && s.optLabelActive]}>{opt.label}</Text>
+                  <Text style={s.optDesc}>{opt.desc}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[s.optCard, customDeficit !== '' && s.optCardActive]}
+                onPress={() => { if (customDeficit === '') setCustomDeficit('400'); }}
+              >
+                <Text style={[s.optLabel, customDeficit !== '' && s.optLabelActive]}>Custom</Text>
+                <Text style={s.optDesc}>Set your own daily calorie deficit</Text>
+              </TouchableOpacity>
+              {customDeficit !== '' && (
+                <Field
+                  label="My deficit (kcal/day)"
+                  value={customDeficit}
+                  onChangeText={v => {
+                    setCustomDeficit(v);
+                    const n = parseInt(v);
+                    if (n > 0) setDeficitKcal(n);
+                  }}
+                  keyboardType="number-pad"
+                />
+              )}
+              <Btn label="Continue" onPress={next} />
+            </View>
+          )}
+
           {step === 'activity' && (
             <View style={s.stepWrap}>
               <BackBtn onPress={back} />
@@ -252,7 +378,7 @@ export default function Onboarding() {
               <Text style={s.sub}>Fine-tune your daily targets</Text>
               {(draft.height_cm && draft.weight_kg && draft.age) ? (
                 <View style={s.hintBox}>
-                  <Text style={s.hintText}>Estimated TDEE: {calcRecommended(draft)} kcal/day</Text>
+                  <Text style={s.hintText}>Estimated TDEE: {calcTDEE(draft)} kcal/day</Text>
                 </View>
               ) : null}
               <Field
@@ -460,6 +586,14 @@ const s = StyleSheet.create({
     borderColor: C.limeDim,
   },
   hintText: { fontSize: 14, color: C.lime, textAlign: 'center', fontWeight: '600' },
+
+  healthBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.surface2, borderWidth: 1, borderColor: C.border,
+    borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, marginBottom: 20,
+  },
+  healthBtnIcon: { fontSize: 16 },
+  healthBtnText: { fontSize: 14, fontWeight: '600', color: C.lime },
 
   quickRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   quickBtn: {

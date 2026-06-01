@@ -8,6 +8,7 @@ import {
   UserRecipe,
   adaptRecipeWithLidl,
   fetchLidlCatalog,
+  fetchMealSteps,
   fetchUserRecipes,
   saveUserRecipe,
   swapMeal as apiSwapMeal,
@@ -75,6 +76,8 @@ export default function PlanScreen() {
 
   const [selectedDay, setSelectedDay] = useState(TODAY);
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
+  const [stepsCache, setStepsCache] = useState<Record<string, string[]>>({});
+  const [stepsLoadingName, setStepsLoadingName] = useState<string | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [swapState, setSwapState] = useState<SwapState | null>(null);
@@ -330,7 +333,17 @@ export default function PlanScreen() {
                   { backgroundColor: expanded ? colors.surface2 : colors.surface,
                     borderColor: expanded ? accent : colors.border,
                     opacity: isSwapping ? 0.5 : 1 }]}
-                onPress={() => { setExpandedMeal(expanded ? null : idx); setEditingIdx(null); }}
+                onPress={() => {
+                  const next = expanded ? null : idx;
+                  setExpandedMeal(next);
+                  setEditingIdx(null);
+                  if (next !== null && !stepsCache[meal.name] && stepsLoadingName !== meal.name) {
+                    setStepsLoadingName(meal.name);
+                    fetchMealSteps(meal.name, meal.ingredients).then(steps => {
+                      setStepsCache(c => ({ ...c, [meal.name]: steps }));
+                    }).finally(() => setStepsLoadingName(null));
+                  }
+                }}
               >
                 <View style={styles.mealCardHeader}>
                   <View style={[styles.mealTypePill, { backgroundColor: accentDim }]}>
@@ -380,17 +393,20 @@ export default function PlanScreen() {
                   ))}
                 </View>
 
-                {expanded && meal.steps && meal.steps.length > 0 && (
+                {expanded && (
                   <View style={[styles.stepsBox, { borderTopColor: colors.border }]}>
                     <Text style={[styles.stepsLabel, { color: colors.text3 }]}>RECIPE</Text>
-                    {meal.steps.map((step, si) => (
-                      <View key={si} style={styles.stepRow}>
-                        <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
-                          <Text style={[styles.stepNumText, { color: colors.lime }]}>{si + 1}</Text>
-                        </View>
-                        <Text style={[styles.stepText, { color: colors.text2 }]}>{step}</Text>
-                      </View>
-                    ))}
+                    {stepsLoadingName === meal.name
+                      ? <ActivityIndicator color={colors.lime} style={{ marginVertical: 8 }} />
+                      : (stepsCache[meal.name] ?? []).map((step, si) => (
+                          <View key={si} style={styles.stepRow}>
+                            <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
+                              <Text style={[styles.stepNumText, { color: colors.lime }]}>{si + 1}</Text>
+                            </View>
+                            <Text style={[styles.stepText, { color: colors.text2 }]}>{step}</Text>
+                          </View>
+                        ))
+                    }
                   </View>
                 )}
 

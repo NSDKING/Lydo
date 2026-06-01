@@ -8,7 +8,7 @@ export interface Meal {
   carbs_g: number;
   fat_g: number;
   ingredients: string[];
-  steps: string[];
+  steps?: string[];
   lidl_products_used: string[];
 }
 
@@ -117,6 +117,11 @@ export async function generateMenuPlan(params?: {
     userId: params?.userId,
   });
   return data.plan;
+}
+
+export async function fetchMealSteps(mealName: string, ingredients: string[]): Promise<string[]> {
+  const data = await post<{ steps: string[] }>('/meal/steps', { mealName, ingredients }, 30_000);
+  return data.steps;
 }
 
 export async function swapMeal(dayPlan: DayPlan, mealIndex: number, preferences?: string): Promise<Meal> {

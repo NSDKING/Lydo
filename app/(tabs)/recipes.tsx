@@ -12,6 +12,7 @@ import {
   UserRecipe,
 } from '@/services/api';
 import * as Clipboard from 'expo-clipboard';
+import { useShareIntentContext } from 'expo-share-intent';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -77,6 +78,9 @@ export default function RecipesScreen() {
     }
   };
 
+  // ── Share Intent (native iOS/Android share sheet) ─────────────────────────
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+
   // ── Clipboard TikTok detection ─────────────────────────────────────────────
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -101,6 +105,17 @@ export default function RecipesScreen() {
     });
     return () => sub.remove();
   }, [checkClipboard]);
+
+  useEffect(() => {
+    if (!hasShareIntent) return;
+    const url = shareIntent?.webUrl ?? shareIntent?.text ?? '';
+    resetShareIntent();
+    if (url && url !== lastHandledUrl.current) {
+      lastHandledUrl.current = url;
+      handleImportUrl(url);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasShareIntent]);
 
   // ── TikTok imports (in-memory) ─────────────────────────────────────────────
   const [expandedMeal, setExpandedMeal] = useState<number | null>(null);
