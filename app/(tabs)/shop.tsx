@@ -1,10 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { useProfile } from '@/context/ProfileContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 import { LidlPromoDetail, fetchLidlCatalog, getWeekKey } from '@/services/api';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -108,31 +108,41 @@ export default function ShopScreen() {
   const [collapsed, setCollapsed]   = useState<Set<string>>(new Set());
 
   const weekKey = getWeekKey();
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load pantry + this week's checked state from AsyncStorage
+  // Load pantry (persists across weeks) + checked (this week only) from Supabase
   useEffect(() => {
     (async () => {
-      try {
-        const [p, c] = await Promise.all([
-          AsyncStorage.getItem('lydo_pantry'),
-          AsyncStorage.getItem(`lydo_checked_${weekKey}`),
-        ]);
-        if (p) setPantry(new Set(JSON.parse(p)));
-        if (c) setChecked(new Set(JSON.parse(c)));
-      } catch {}
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase
+        .from('user_grocery_state')
+        .select('week_key, items')
+        .eq('user_id', uid)
+        .in('week_key', ['pantry', weekKey]);
+      if (!data) return;
+      for (const row of data) {
+        if (row.week_key === 'pantry') setPantry(new Set(row.items ?? []));
+        else setChecked(new Set(row.items ?? []));
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist pantry
-  useEffect(() => {
-    AsyncStorage.setItem('lydo_pantry', JSON.stringify([...pantry])).catch(() => {});
-  }, [pantry]);
-
-  // Persist checked (week-scoped)
-  useEffect(() => {
-    AsyncStorage.setItem(`lydo_checked_${weekKey}`, JSON.stringify([...checked])).catch(() => {});
-  }, [checked, weekKey]);
+  // Debounced Supabase upsert so rapid taps don't flood the DB
+  const saveState = useCallback((pantryArr: string[], checkedArr: string[]) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      await supabase.from('user_grocery_state').upsert([
+        { user_id: uid, week_key: 'pantry',  items: pantryArr,  updated_at: new Date().toISOString() },
+        { user_id: uid, week_key: weekKey,   items: checkedArr, updated_at: new Date().toISOString() },
+      ], { onConflict: 'user_id,week_key' });
+    }, 800);
+  }, [weekKey]);
 
   useEffect(() => {
     if (!plan) return;
@@ -143,22 +153,40 @@ export default function ShopScreen() {
   // Checking an item = buying it = add to pantry
   const toggle = useCallback((id: string, name: string) => {
     setChecked(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) {
-        n.delete(id);
+      const nextChecked = new Set(prev);
+      if (nextChecked.has(id)) {
+        nextChecked.delete(id);
+        setPantry(p => {
+          const nextPantry = new Set(p);
+          saveState([...nextPantry], [...nextChecked]);
+          return nextPantry;
+        });
       } else {
-        n.add(id);
-        setPantry(p => new Set([...p, name]));
+        nextChecked.add(id);
+        setPantry(p => {
+          const nextPantry = new Set([...p, name]);
+          saveState([...nextPantry], [...nextChecked]);
+          return nextPantry;
+        });
       }
-      return n;
+      return nextChecked;
     });
-  }, []);
+  }, [saveState]);
 
   // Mark item as finished = remove from pantry so it appears on next week's buy list
   const markFinished = useCallback((name: string, id: string) => {
-    setPantry(p => { const n = new Set(p); n.delete(name); return n; });
-    setChecked(p => { const n = new Set(p); n.delete(id); return n; });
-  }, []);
+    setPantry(p => {
+      const nextPantry = new Set(p);
+      nextPantry.delete(name);
+      setChecked(c => {
+        const nextChecked = new Set(c);
+        nextChecked.delete(id);
+        saveState([...nextPantry], [...nextChecked]);
+        return nextChecked;
+      });
+      return nextPantry;
+    });
+  }, [saveState]);
 
   const collapse = (label: string) => setCollapsed(p => { const n = new Set(p); n.has(label) ? n.delete(label) : n.add(label); return n; });
 
