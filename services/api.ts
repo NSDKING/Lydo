@@ -193,6 +193,7 @@ export interface UserRecipe {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  weight_g?: number | null;
   ingredients: string[];
   lidl_products_used: string[];
   created_at: string;
@@ -210,23 +211,25 @@ export async function fetchUserRecipes(): Promise<UserRecipe[]> {
 }
 
 export async function saveUserRecipe(
-  recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'>,
+  recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'> & { weight_g?: number | null },
   userId?: string,
 ): Promise<string> {
   const uid = userId ?? (await supabase.auth.getSession()).data.session?.user.id;
   if (!uid) throw new Error('Not authenticated');
+  const payload: Record<string, unknown> = {
+    user_id: uid,
+    name: recipe.name,
+    calories: recipe.calories,
+    protein_g: recipe.protein_g,
+    carbs_g: recipe.carbs_g,
+    fat_g: recipe.fat_g,
+    ingredients: recipe.ingredients,
+    lidl_products_used: recipe.lidl_products_used,
+  };
+  if (recipe.weight_g != null) payload.weight_g = recipe.weight_g;
   const { data, error } = await supabase
     .from('user_recipes')
-    .insert({
-      user_id: uid,
-      name: recipe.name,
-      calories: recipe.calories,
-      protein_g: recipe.protein_g,
-      carbs_g: recipe.carbs_g,
-      fat_g: recipe.fat_g,
-      ingredients: recipe.ingredients,
-      lidl_products_used: recipe.lidl_products_used,
-    })
+    .insert(payload)
     .select('id')
     .single();
   if (error) throw new Error(error.message);

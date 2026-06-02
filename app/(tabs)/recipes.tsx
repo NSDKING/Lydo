@@ -19,8 +19,6 @@ import {
   ActivityIndicator,
   AppState,
   AppStateStatus,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -139,8 +137,8 @@ export default function RecipesScreen() {
   const [createProtein, setCreateProtein] = useState('');
   const [createCarbs, setCreateCarbs] = useState('');
   const [createFat, setCreateFat] = useState('');
+  const [createWeight, setCreateWeight] = useState('');
   const [createIngredients, setCreateIngredients] = useState('');
-  const [createSteps, setCreateSteps] = useState('');
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -158,11 +156,12 @@ export default function RecipesScreen() {
         protein_g: parseFloat(createProtein) || 0,
         carbs_g: parseFloat(createCarbs) || 0,
         fat_g: parseFloat(createFat) || 0,
+        weight_g: createWeight ? parseFloat(createWeight) || null : null,
         ingredients: createIngredients.split('\n').map(s => s.trim()).filter(Boolean),
         lidl_products_used: [],
       });
       setCreateName(''); setCreateCal(''); setCreateProtein('');
-      setCreateCarbs(''); setCreateFat(''); setCreateIngredients(''); setCreateSteps('');
+      setCreateCarbs(''); setCreateFat(''); setCreateWeight(''); setCreateIngredients('');
       setCreating(false);
       loadMyRecipes();
     } catch (e) {
@@ -324,6 +323,7 @@ export default function RecipesScreen() {
                 { label: `${t('protein')} (g)`, value: createProtein, set: setCreateProtein, kb: 'decimal-pad' as const },
                 { label: `${t('carbs')} (g)`, value: createCarbs, set: setCreateCarbs, kb: 'decimal-pad' as const },
                 { label: `${t('fat')} (g)`, value: createFat, set: setCreateFat, kb: 'decimal-pad' as const },
+                { label: lang === 'fr' ? 'Poids par portion (g)' : 'Serving weight (g)', value: createWeight, set: setCreateWeight, kb: 'decimal-pad' as const },
               ].map(f => (
                 <View key={f.label} style={styles.createField}>
                   <Text style={[styles.createFieldLabel, { color: colors.text3 }]}>{f.label}</Text>
@@ -381,6 +381,7 @@ export default function RecipesScreen() {
                       <Text style={[styles.recipeName, { color: colors.text }]}>{recipe.name}</Text>
                       <View style={styles.recipeMeta}>
                         <Text style={[styles.recipeMetaText, { color: colors.lime }]}>{recipe.calories} kcal</Text>
+                        {recipe.weight_g ? <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>{recipe.weight_g}g</Text> : null}
                         <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>P {recipe.protein_g}g</Text>
                         <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>C {recipe.carbs_g}g</Text>
                         <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>F {recipe.fat_g}g</Text>
@@ -784,7 +785,7 @@ const styles = StyleSheet.create({
   createError: { fontSize: 12, marginBottom: 10 },
   emptyCard: { borderWidth: 1, borderRadius: 14, padding: 16 },
   emptyText: { fontSize: 13, lineHeight: 18 },
-  recipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 10 },
+  recipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 14 },
   recipeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   recipeCardLeft: { flex: 1 },
   recipeName: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
