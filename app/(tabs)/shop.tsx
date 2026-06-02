@@ -211,6 +211,9 @@ export default function ShopScreen() {
 
     // Second pass: build deduplicated items with mealCount
     const lSeen = new Set<string>(), oSeen = new Set<string>();
+    // Track catalog titles already added to prevent the same Lidl product
+    // appearing twice (once from lidl_products_used, once from ingredients)
+    const addedCatalogTitles = new Set<string>();
     const items: GroceryItem[] = [];
     for (const day of plan.days) {
       for (const meal of day.meals) {
@@ -218,14 +221,17 @@ export default function ShopScreen() {
           const k = p.toLowerCase().trim();
           if (lSeen.has(k)) continue; lSeen.add(k);
           const m = matchCatalog(p, catalog);
+          if (m?.title) addedCatalogTitles.add(m.title.toLowerCase());
           items.push({ id: `l-${k}`, name: m?.title ?? p, isLidl: true, aisle: getAisle(p), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url, mealCount: mealCounts.get(`l-${k}`) ?? 1 });
         }
         for (const ing of meal.ingredients) {
           const stripped = stripQty(ing);
           const k = stripped.toLowerCase();
           if ([...lSeen].some(l => l.includes(k) || k.includes(l)) || oSeen.has(k)) continue;
-          oSeen.add(k);
           const m = matchCatalog(stripped, catalog);
+          // Skip if this ingredient maps to a catalog item already added from lidl_products_used
+          if (m?.title && addedCatalogTitles.has(m.title.toLowerCase())) continue;
+          oSeen.add(k);
           items.push({
             id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing),
             price: m?.price, old_price: m?.old_price,
