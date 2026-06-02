@@ -9,10 +9,10 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const SYSTEM_PROMPT = `You are a precision nutrition assistant that creates practical weekly meal plans using real supermarket products.
 
 You will receive a list of Lidl supermarket promotions and a user request. Create a 7-day meal plan that:
-1. Prioritises discounted products (those with old_price) to save money
-2. Meets the user's calorie target and macros
-3. Uses realistic portions — vary meals across the week, reuse ingredients smartly
-4. Names meals clearly (e.g. "Poulet rôti + légumes vapeur")
+1. Uses a VARIETY of different proteins, grains and vegetables across the 7 days — do not repeat the same meal or the same main ingredient more than twice
+2. For lidl_products_used: ONLY list items that actually appear in that specific meal's ingredients — do not copy the same Lidl products into every meal
+3. Meets the user's calorie target and macros
+4. Names meals clearly and specifically (e.g. "Saumon grillé + quinoa" not just "Meal")
 
 CRITICAL RULES:
 - Your entire response must be a single valid JSON object — no markdown, no prose, no code fences

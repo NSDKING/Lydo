@@ -192,15 +192,10 @@ export default function ShopScreen() {
 
   const aisleMap = useMemo((): Map<string, GroceryItem[]> => {
     if (!plan) return new Map();
-    const ORDERED = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-    const todayIdx  = ORDERED.indexOf(todayName);
-    // Only include today + future days so past groceries drop off automatically
-    const remainingDays = plan.days.filter(d => ORDERED.indexOf(d.day) >= todayIdx);
 
     const lSeen = new Set<string>(), oSeen = new Set<string>();
     const items: GroceryItem[] = [];
-    for (const day of remainingDays) {
+    for (const day of plan.days) {
       for (const meal of day.meals) {
         for (const p of meal.lidl_products_used) {
           const k = p.toLowerCase().trim();
@@ -382,7 +377,9 @@ export default function ShopScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: C.text }]}>Shopping List</Text>
               <Text style={[styles.subtitle, { color: C.text3 }]}>
-                {plan ? `${total} items · week of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : "This week's groceries"}
+                {plan
+                  ? `${total} items from ${plan.days.length} days · ${plan.days[0]?.day ?? ''} – ${plan.days[plan.days.length - 1]?.day ?? ''}`
+                  : "Generate a meal plan first"}
               </Text>
             </View>
 
