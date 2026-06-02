@@ -89,7 +89,8 @@ const AISLE_FALLBACK: Record<string, string> = {
 interface GroceryItem {
   id: string; name: string; isLidl: boolean; aisle: string;
   price?: string; old_price?: string; discount_percent?: number; image_url?: string;
-  lidlDeal?: boolean; // non-Lidl ingredient that matched a current catalog promo
+  lidlDeal?: boolean;
+  mealCount: number; // how many meals use this ingredient
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -193,6 +194,22 @@ export default function ShopScreen() {
   const aisleMap = useMemo((): Map<string, GroceryItem[]> => {
     if (!plan) return new Map();
 
+    // First pass: count how many meals use each key
+    const mealCounts = new Map<string, number>();
+    for (const day of plan.days) {
+      for (const meal of day.meals) {
+        for (const p of meal.lidl_products_used) {
+          const k = `l-${p.toLowerCase().trim()}`;
+          mealCounts.set(k, (mealCounts.get(k) ?? 0) + 1);
+        }
+        for (const ing of meal.ingredients) {
+          const k = `o-${stripQty(ing).toLowerCase()}`;
+          mealCounts.set(k, (mealCounts.get(k) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Second pass: build deduplicated items with mealCount
     const lSeen = new Set<string>(), oSeen = new Set<string>();
     const items: GroceryItem[] = [];
     for (const day of plan.days) {
@@ -201,7 +218,7 @@ export default function ShopScreen() {
           const k = p.toLowerCase().trim();
           if (lSeen.has(k)) continue; lSeen.add(k);
           const m = matchCatalog(p, catalog);
-          items.push({ id: `l-${k}`, name: m?.title ?? p, isLidl: true, aisle: getAisle(p), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url });
+          items.push({ id: `l-${k}`, name: m?.title ?? p, isLidl: true, aisle: getAisle(p), price: m?.price, old_price: m?.old_price, discount_percent: m?.discount_percent, image_url: m?.image_url, mealCount: mealCounts.get(`l-${k}`) ?? 1 });
         }
         for (const ing of meal.ingredients) {
           const stripped = stripQty(ing);
@@ -213,7 +230,7 @@ export default function ShopScreen() {
             id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing),
             price: m?.price, old_price: m?.old_price,
             discount_percent: m?.discount_percent, image_url: m?.image_url,
-            lidlDeal: !!m,
+            lidlDeal: !!m, mealCount: mealCounts.get(`o-${k}`) ?? 1,
           });
         }
       }
@@ -309,18 +326,19 @@ export default function ShopScreen() {
 
           {/* Name + price */}
           <View style={[styles.itemBody, { opacity: (isChecked || inPantry) ? 0.55 : 1 }]}>
-            <Text
-              numberOfLines={2}
-              style={[
-                styles.itemName,
-                {
-                  color: C.text,
-                  textDecorationLine: isChecked ? 'line-through' : 'none',
-                },
-              ]}
-            >
-              {item.name}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text
+                numberOfLines={2}
+                style={[styles.itemName, { flex: 1, color: C.text, textDecorationLine: isChecked ? 'line-through' : 'none' }]}
+              >
+                {item.name}
+              </Text>
+              {item.mealCount > 1 && (
+                <View style={[styles.countPill, { backgroundColor: C.surface3, borderColor: C.border2 }]}>
+                  <Text style={[styles.countPillText, { color: C.text3 }]}>× {item.mealCount}</Text>
+                </View>
+              )}
+            </View>
             {inPantry && !isChecked && (
               <Text style={[styles.haveLabel, { color: C.lime }]}>Already in pantry</Text>
             )}
@@ -604,6 +622,9 @@ const styles = StyleSheet.create({
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill:  { height: '100%', borderRadius: 3 },
 
+  nameRow:          { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  countPill:        { borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, flexShrink: 0, marginTop: 1 },
+  countPillText:    { fontSize: 11, fontWeight: '700' },
   haveLabel:        { fontSize: 11, fontWeight: '600', marginBottom: 2 },
   finishedBtn:      { marginTop: 2, marginBottom: 4, borderWidth: 1, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 14, alignItems: 'center' },
   finishedBtnText:  { fontSize: 12, fontWeight: '600' },
