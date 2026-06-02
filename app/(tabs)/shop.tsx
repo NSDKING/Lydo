@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useLang } from '@/context/LangContext';
 import { useProfile } from '@/context/ProfileContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -98,6 +99,7 @@ interface GroceryItem {
 export default function ShopScreen() {
   const colorScheme = useColorScheme();
   const C = Colors[colorScheme ?? 'dark'];
+  const { t } = useLang();
   const { plan, isLoading: planLoading } = useMenu();
   const { profile } = useProfile();
   const budget = profile.weekly_budget_eur;
@@ -346,7 +348,7 @@ export default function ShopScreen() {
               )}
             </View>
             {inPantry && !isChecked && (
-              <Text style={[styles.haveLabel, { color: C.lime }]}>Already in pantry</Text>
+              <Text style={[styles.haveLabel, { color: C.lime }]}>{t('shopAlready')}</Text>
             )}
             {item.price && !inPantry ? (
               <View style={styles.priceRow}>
@@ -361,7 +363,7 @@ export default function ShopScreen() {
           {/* Badge */}
           {inPantry ? (
             <View style={[styles.badge, { backgroundColor: C.limeDim, borderColor: 'rgba(181,242,61,0.35)' }]}>
-              <Text style={[styles.badgeText, { color: C.lime }]}>Have ✓</Text>
+              <Text style={[styles.badgeText, { color: C.lime }]}>{t('shopHave')}</Text>
             </View>
           ) : item.discount_percent ? (
             <View style={[styles.badge, { backgroundColor: C.orangeDim, borderColor: `${C.orange}50` }]}>
@@ -384,7 +386,7 @@ export default function ShopScreen() {
             style={[styles.finishedBtn, { backgroundColor: C.surface2, borderColor: C.border2 }]}
             onPress={() => markFinished(item.name, item.id)}
           >
-            <Text style={[styles.finishedBtnText, { color: C.orange }]}>Used it up — remove from pantry</Text>
+            <Text style={[styles.finishedBtnText, { color: C.orange }]}>{t('shopUsedUp')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -400,11 +402,11 @@ export default function ShopScreen() {
           {/* Title row */}
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: C.text }]}>Shopping List</Text>
+              <Text style={[styles.title, { color: C.text }]}>{t('shopTitle')}</Text>
               <Text style={[styles.subtitle, { color: C.text3 }]}>
                 {plan
-                  ? `${total} items from ${plan.days.length} days · ${plan.days[0]?.day ?? ''} – ${plan.days[plan.days.length - 1]?.day ?? ''}`
-                  : "Generate a meal plan first"}
+                  ? `${total} ${t('shopItems')} · ${plan.days[0]?.day ?? ''} – ${plan.days[plan.days.length - 1]?.day ?? ''}`
+                  : t('shopEmpty')}
               </Text>
             </View>
 
@@ -436,8 +438,8 @@ export default function ShopScreen() {
             <View style={[styles.budgetCard, { backgroundColor: C.surface, borderColor: overBudget ? `${C.orange}60` : C.border }]}>
               <View style={styles.budgetRow}>
                 <Text style={[styles.budgetLabel, { color: C.text3 }]}>
-                  {'Lidl prices only'}
-                  {pantryCount > 0 ? ` · ${pantryCount} in pantry` : ''}
+                  {t('shopLidlOnly')}
+                  {pantryCount > 0 ? ` · ${pantryCount} ${t('shopInPantry')}` : ''}
                 </Text>
                 <Text style={[styles.budgetAmount, { color: overBudget ? C.orange : C.text }]}>
                   <Text style={{ color: overBudget ? C.orange : C.lime, fontWeight: '800' }}>€{estimatedCost.toFixed(2)}</Text>
@@ -452,7 +454,7 @@ export default function ShopScreen() {
               </View>
               {overBudget && (
                 <Text style={[styles.overBudgetText, { color: C.orange }]}>
-                  €{(estimatedCost - budget).toFixed(2)} over budget — the meal plan uses more than your weekly budget
+                  €{(estimatedCost - budget).toFixed(2)} {t('shopOverBudget')}
                 </Text>
               )}
             </View>
@@ -466,7 +468,7 @@ export default function ShopScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.savingsAmount, { color: C.lime }]}>Save up to €{savings.toFixed(2)}</Text>
-                <Text style={[styles.savingsLabel, { color: C.text3 }]}>with Lidl promotions this week</Text>
+                <Text style={[styles.savingsLabel, { color: C.text3 }]}>{t('shopSavings')}</Text>
               </View>
             </View>
           )}
@@ -477,7 +479,7 @@ export default function ShopScreen() {
           <View style={styles.loadingRow}>
             <ActivityIndicator color={C.lime} size="small" />
             <Text style={[styles.loadingText, { color: C.text3 }]}>
-              {planLoading ? 'Building your list…' : 'Fetching Lidl prices…'}
+              {planLoading ? t('shopBuilding') : t('shopFetching')}
             </Text>
           </View>
         )}
@@ -490,7 +492,7 @@ export default function ShopScreen() {
               <View style={[styles.lidlBanner, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <View style={[styles.lidlDot, { backgroundColor: C.lime }]} />
                 <Text style={[styles.lidlBannerText, { color: C.text2 }]}>
-                  <Text style={{ color: C.lime, fontWeight: '700' }}>{lidlCount} items</Text> available at Lidl this week
+                  <Text style={{ color: C.lime, fontWeight: '700' }}>{lidlCount} {t('shopItems')}</Text> {t('shopAvailable')}
                 </Text>
               </View>
             )}
@@ -560,7 +562,7 @@ export default function ShopScreen() {
               <View style={[styles.summaryBar, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <View style={styles.summaryLeft}>
                   <Text style={[styles.summaryCount, { color: C.text }]}>{doneCount}</Text>
-                  <Text style={[styles.summaryOf, { color: C.text3 }]}>  of {total} items</Text>
+                  <Text style={[styles.summaryOf, { color: C.text3 }]}>  / {total} {t('shopItems')}</Text>
                   {checkedTotal > 0 && (
                     <Text style={[styles.summaryOf, { color: C.lime, fontWeight: '700' }]}>
                       {'  ·  '}€{checkedTotal.toFixed(2)}
@@ -572,7 +574,7 @@ export default function ShopScreen() {
                     style={[styles.clearBtn, { borderColor: C.border2 }]}
                     onPress={() => setChecked(new Set())}
                   >
-                    <Text style={[styles.clearBtnText, { color: C.text3 }]}>Clear all</Text>
+                    <Text style={[styles.clearBtnText, { color: C.text3 }]}>{t('shopClear')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -580,10 +582,10 @@ export default function ShopScreen() {
               {/* Action buttons */}
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1 }]}>
-                  <Text style={[styles.actionBtnText, { color: C.text2 }]}>↗  Share</Text>
+                  <Text style={[styles.actionBtnText, { color: C.text2 }]}>{t('shopShare')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.lime, flex: 2 }]}>
-                  <Text style={[styles.actionBtnText, { color: C.background, fontWeight: '800' }]}>🛒  Order Online</Text>
+                  <Text style={[styles.actionBtnText, { color: C.background, fontWeight: '800' }]}>{t('shopOrder')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -594,10 +596,8 @@ export default function ShopScreen() {
         {!planLoading && !plan && (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyEmoji}>🛒</Text>
-            <Text style={[styles.emptyTitle, { color: C.text }]}>No list yet</Text>
-            <Text style={[styles.emptyDesc, { color: C.text3 }]}>
-              Generate a meal plan to automatically build your weekly shopping list.
-            </Text>
+            <Text style={[styles.emptyTitle, { color: C.text }]}>{t('shopNoList')}</Text>
+            <Text style={[styles.emptyDesc, { color: C.text3 }]}>{t('shopNoPlan')}</Text>
           </View>
         )}
 

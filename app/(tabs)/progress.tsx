@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useLang } from '@/context/LangContext';
 import { DEFAULT_PROFILE, useProfile, UserProfile } from '@/context/ProfileContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
@@ -101,6 +102,7 @@ function PillSelector<T extends string>({
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
+  const { t, langPref, setLang } = useLang();
   const { profile, saving, saveProfile } = useProfile();
 
   const [draft, setDraft] = useState<UserProfile>(profile);
@@ -133,20 +135,20 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'You will be returned to the login screen.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+    Alert.alert(t('profileSignOut'), t('profileSignOutMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('profileSignOut'), style: 'destructive', onPress: () => supabase.auth.signOut() },
     ]);
   };
 
   const handleResetOnboarding = () => {
     Alert.alert(
-      'Reset & Redo Onboarding',
-      'This deletes your profile data and signs you out. Your meal plans and recipes are kept.',
+      t('profileResetTitle'),
+      t('profileResetMsg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Reset',
+          text: t('profileResetBtn'),
           style: 'destructive',
           onPress: async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -167,7 +169,7 @@ export default function ProfileScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('profileTitle')}</Text>
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: saved ? colors.surface3 : colors.lime, opacity: saving ? 0.7 : 1 }]}
             onPress={handleSave}
@@ -176,7 +178,7 @@ export default function ProfileScreen() {
             {saving
               ? <ActivityIndicator color={colors.background} size="small" />
               : <Text style={[styles.saveBtnText, { color: saved ? colors.lime : colors.background }]}>
-                  {saved ? '✓ Saved' : 'Save'}
+                  {saved ? t('profileSaved') : t('profileSave')}
                 </Text>
             }
           </TouchableOpacity>
@@ -190,19 +192,19 @@ export default function ProfileScreen() {
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                   <Text style={[styles.statVal, { color: bmiCategory(stats.bmi).color }]}>{stats.bmi}</Text>
-                  <Text style={[styles.statLabel, { color: colors.text3 }]}>BMI</Text>
+                  <Text style={[styles.statLabel, { color: colors.text3 }]}>{t('profileBmi')}</Text>
                   <Text style={[styles.statSub, { color: bmiCategory(stats.bmi).color }]}>{bmiCategory(stats.bmi).label}</Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statVal, { color: colors.text }]}>{stats.tdee}</Text>
-                  <Text style={[styles.statLabel, { color: colors.text3 }]}>TDEE</Text>
+                  <Text style={[styles.statLabel, { color: colors.text3 }]}>{t('profileTdee')}</Text>
                   <Text style={[styles.statSub, { color: colors.text3 }]}>kcal/day</Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statVal, { color: colors.lime }]}>{stats.recommended}</Text>
-                  <Text style={[styles.statLabel, { color: colors.text3 }]}>Target</Text>
+                  <Text style={[styles.statLabel, { color: colors.text3 }]}>{t('profileTarget')}</Text>
                   <Text style={[styles.statSub, { color: colors.text3 }]}>kcal/day</Text>
                 </View>
               </View>
@@ -210,51 +212,51 @@ export default function ProfileScreen() {
           )}
 
           {/* Personal info */}
-          <SectionHeader title="Personal Info" colors={colors} />
+          <SectionHeader title={t('profilePersonal')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <FieldRow label="Name" value={draft.name} onChangeText={v => set('name', v)} placeholder="Your name" colors={colors} />
-            <FieldRow label="Age" value={num(draft.age)} onChangeText={v => set('age', v)} placeholder="25" unit="yr" keyboard="numeric" colors={colors} />
-            <FieldRow label="Height" value={num(draft.height_cm)} onChangeText={v => set('height_cm', v)} placeholder="175" unit="cm" keyboard="numeric" colors={colors} />
-            <FieldRow label="Weight" value={num(draft.weight_kg)} onChangeText={v => set('weight_kg', v)} placeholder="70" unit="kg" keyboard="decimal-pad" colors={colors} />
+            <FieldRow label={t('ob_name')} value={draft.name} onChangeText={v => set('name', v)} placeholder={t('profileNamePlaceholder')} colors={colors} />
+            <FieldRow label={t('ob_age')} value={num(draft.age)} onChangeText={v => set('age', v)} placeholder="25" unit={t('profileAgeUnit')} keyboard="numeric" colors={colors} />
+            <FieldRow label={t('ob_height')} value={num(draft.height_cm)} onChangeText={v => set('height_cm', v)} placeholder="175" unit="cm" keyboard="numeric" colors={colors} />
+            <FieldRow label={t('ob_weight')} value={num(draft.weight_kg)} onChangeText={v => set('weight_kg', v)} placeholder="70" unit="kg" keyboard="decimal-pad" colors={colors} />
           </View>
 
           {/* Goal */}
-          <SectionHeader title="Goal" colors={colors} />
+          <SectionHeader title={t('profileGoal')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <PillSelector
               value={draft.goal}
               onChange={v => set('goal', v)}
               colors={colors}
               options={[
-                { key: 'lose', label: 'Lose Weight' },
-                { key: 'maintain', label: 'Maintain' },
-                { key: 'gain', label: 'Gain Muscle' },
+                { key: 'lose', label: t('profileLose') },
+                { key: 'maintain', label: t('profileMaintain') },
+                { key: 'gain', label: t('profileGain') },
               ]}
             />
           </View>
 
           {/* Activity */}
-          <SectionHeader title="Activity Level" colors={colors} />
+          <SectionHeader title={t('profileActivity')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <PillSelector
               value={draft.activity_level}
               onChange={v => set('activity_level', v)}
               colors={colors}
               options={[
-                { key: 'sedentary', label: 'Sedentary' },
-                { key: 'light', label: 'Light' },
-                { key: 'moderate', label: 'Moderate' },
-                { key: 'active', label: 'Active' },
-                { key: 'very_active', label: 'Very Active' },
+                { key: 'sedentary', label: t('profileSedentary') },
+                { key: 'light', label: t('profileLight') },
+                { key: 'moderate', label: t('profileModerate') },
+                { key: 'active', label: t('profileActive') },
+                { key: 'very_active', label: t('profileVeryActive') },
               ]}
             />
           </View>
 
           {/* Nutrition */}
-          <SectionHeader title="Nutrition" colors={colors} />
+          <SectionHeader title={t('profileNutrition')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <FieldRow
-              label="Daily Target"
+              label={t('profileDailyTarget')}
               value={num(draft.daily_calories)}
               onChangeText={v => set('daily_calories', v)}
               placeholder="2000"
@@ -262,34 +264,29 @@ export default function ProfileScreen() {
               keyboard="numeric"
               colors={colors}
             />
-            {stats && (
-              <Text style={[styles.hint, { color: colors.text3 }]}>
-                Calculated target: {stats.recommended} kcal based on your stats
-              </Text>
-            )}
             <FieldRow
-              label="Preferences"
+              label={t('profilePrefs')}
               value={draft.preferences}
               onChangeText={v => set('preferences', v)}
-              placeholder="e.g. Mediterranean, high protein…"
+              placeholder={t('profilePrefsPlaceholder')}
               colors={colors}
               multiline
             />
             <FieldRow
-              label="Restrictions"
+              label={t('profileRestrictions')}
               value={draft.dietary_restrictions}
               onChangeText={v => set('dietary_restrictions', v)}
-              placeholder="e.g. gluten-free, no shellfish…"
+              placeholder={t('profileRestrictionsPlaceholder')}
               colors={colors}
               multiline
             />
           </View>
 
           {/* Budget */}
-          <SectionHeader title="Budget" colors={colors} />
+          <SectionHeader title={t('profileBudget')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <FieldRow
-              label="Weekly Groceries"
+              label={t('profileWeeklyGroceries')}
               value={num(draft.weekly_budget_eur)}
               onChangeText={v => set('weekly_budget_eur', v)}
               placeholder="80"
@@ -299,17 +296,40 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Language */}
+          <SectionHeader title={t('profileLanguage')} colors={colors} />
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.pillRow}>
+              {([
+                { key: 'auto', label: t('profileLangAuto') },
+                { key: 'en',   label: t('profileLangEn') },
+                { key: 'fr',   label: t('profileLangFr') },
+              ] as const).map(opt => {
+                const active = langPref === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.pill, { borderColor: active ? colors.lime : colors.border, backgroundColor: active ? colors.limeDim : colors.surface3 }]}
+                    onPress={() => setLang(opt.key)}
+                  >
+                    <Text style={[styles.pillText, { color: active ? colors.lime : colors.text3 }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Account */}
-          <SectionHeader title="Account" colors={colors} />
+          <SectionHeader title={t('profileAccount')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, gap: 0 }]}>
             <TouchableOpacity
               style={[styles.accountBtn, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
               onPress={handleSignOut}
             >
-              <Text style={[styles.accountBtnText, { color: colors.text2 }]}>Sign Out</Text>
+              <Text style={[styles.accountBtnText, { color: colors.text2 }]}>{t('profileSignOut')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.accountBtn} onPress={handleResetOnboarding}>
-              <Text style={[styles.accountBtnText, { color: colors.orange }]}>Reset & Redo Onboarding</Text>
+              <Text style={[styles.accountBtnText, { color: colors.orange }]}>{t('profileReset')}</Text>
             </TouchableOpacity>
           </View>
 

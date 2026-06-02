@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/theme';
+import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -47,6 +48,7 @@ function defaultImportState(): ImportState {
 export default function RecipesScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
+  const { t } = useLang();
   const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
 
   // ── My Recipes (Supabase) ──────────────────────────────────────────────────
@@ -216,8 +218,8 @@ export default function RecipesScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Recipes</Text>
-          <Text style={[styles.subtitle, { color: colors.text3 }]}>Saved recipes + plan meals</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t('recipesTitle')}</Text>
+          <Text style={[styles.subtitle, { color: colors.text3 }]}>{t('recipesSub')}</Text>
         </View>
 
         {/* TikTok import card */}
@@ -229,10 +231,10 @@ export default function RecipesScreen() {
             <Text style={styles.importIcon}>{importing ? '⏳' : '📱'}</Text>
             <View style={styles.importHeaderText}>
               <Text style={[styles.importTitle, { color: colors.text }]}>
-                {importing ? 'Importing recipe…' : 'Import from TikTok'}
+                {importing ? t('recipesImporting') : t('recipesImportTitle')}
               </Text>
               <Text style={[styles.importDesc, { color: colors.text3 }]}>
-                {importing ? 'Analysing the video, hang tight' : 'Copy a TikTok link — Lydo auto-detects it'}
+                {importing ? t('recipesAnalysing') : t('recipesImportDesc')}
               </Text>
             </View>
             {importing && <ActivityIndicator color={colors.lime} />}
@@ -240,15 +242,15 @@ export default function RecipesScreen() {
           {!importing && (
             <>
               <View style={[styles.shareHint, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
-                <Text style={[styles.shareStep, { color: colors.text3 }]}>1. Open TikTok and find a recipe video</Text>
+                <Text style={[styles.shareStep, { color: colors.text3 }]}>{t('recipesStep1')}</Text>
                 <Text style={[styles.shareStep, { color: colors.text3 }]}>2. Tap <Text style={{ color: colors.text }}>Share</Text> → <Text style={{ color: colors.lime }}>Copy link</Text></Text>
-                <Text style={[styles.shareStep, { color: colors.text3 }]}>3. Come back to Lydo — imports automatically</Text>
+                <Text style={[styles.shareStep, { color: colors.text3 }]}>{t('recipesStep3')}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.pasteBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
                 onPress={checkClipboard}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.lime }]}>Paste from clipboard</Text>
+                <Text style={[styles.pasteBtnText, { color: colors.lime }]}>{t('recipesPaste')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -258,13 +260,13 @@ export default function RecipesScreen() {
         {/* ── My Recipes (from Supabase) ──────────────────────────────────── */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>My Recipes</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>{t('recipesMyTitle')}</Text>
             {loadingMyRecipes && <ActivityIndicator color={colors.lime} size="small" />}
           </View>
 
           {!loadingMyRecipes && myRecipes.length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.emptyText, { color: colors.text3 }]}>No saved recipes yet — save plan meals or TikTok imports below.</Text>
+              <Text style={[styles.emptyText, { color: colors.text3 }]}>{t('recipesEmpty')}</Text>
             </View>
           )}
 
@@ -325,7 +327,7 @@ export default function RecipesScreen() {
 
                     {recipe.ingredients.length > 0 && (
                       <>
-                        <Text style={[styles.subheading, { color: colors.text3 }]}>INGREDIENTS</Text>
+                        <Text style={[styles.subheading, { color: colors.text3 }]}>{t('ingredients')}</Text>
                         {recipe.ingredients.map((ing, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -337,7 +339,7 @@ export default function RecipesScreen() {
 
                     {hasLidl && (
                       <>
-                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>FROM LIDL</Text>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>{t('fromLidl')}</Text>
                         {recipe.lidl_products_used.map((p, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -356,7 +358,7 @@ export default function RecipesScreen() {
         {/* ── TikTok imports (in-memory) ────────────────────────────────────── */}
         {importedRecipes.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Imported (this session)</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>{t('recipesSession')}</Text>
             {importedRecipes.map((recipe, idx) => {
               const open = expandedRecipe === idx;
               const state = importStates[idx] ?? defaultImportState();
@@ -395,7 +397,7 @@ export default function RecipesScreen() {
                         ))}
                       </View>
 
-                      <Text style={[styles.subheading, { color: colors.text3 }]}>INGREDIENTS</Text>
+                      <Text style={[styles.subheading, { color: colors.text3 }]}>{t('ingredients')}</Text>
                       {recipe.ingredients.map((ing, i) => (
                         <View key={i} style={styles.ingredientRow}>
                           <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -405,7 +407,7 @@ export default function RecipesScreen() {
 
                       {recipe.steps.length > 0 && (
                         <>
-                          <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>STEPS</Text>
+                          <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>{t('steps')}</Text>
                           {recipe.steps.map((step, i) => (
                             <View key={i} style={styles.stepRow}>
                               <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
@@ -419,7 +421,7 @@ export default function RecipesScreen() {
 
                       {/* Add to Plan */}
                       <View style={[styles.addToPlanBox, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}>
-                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>ADD TO PLAN</Text>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('addToPlan')}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayChipsScroll}>
                           <View style={styles.dayChips}>
                             {planDays.map(day => {
@@ -458,7 +460,7 @@ export default function RecipesScreen() {
                           disabled={!state.addDay || state.added}
                         >
                           <Text style={[styles.addBtnText, { color: state.added ? colors.lime : colors.background }]}>
-                            {state.added ? `✓ Added to ${state.addDay}` : state.addDay ? `Add to ${state.addDay}` : 'Select a day'}
+                            {state.added ? `✓ ${state.addDay}` : state.addDay ? `+ ${state.addDay}` : t('selectDay')}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -475,7 +477,7 @@ export default function RecipesScreen() {
                             : <Text style={styles.adaptBtnIcon}>🛒</Text>
                           }
                           <Text style={[styles.adaptBtnText, { color: state.adapting ? colors.text3 : colors.lime }]}>
-                            {state.adapting ? 'Finding Lidl matches…' : 'Adapt with Lidl'}
+                            {state.adapting ? t('findingLidl') : t('adaptLidl')}
                           </Text>
                         </TouchableOpacity>
                         {state.adaptError && (
@@ -483,14 +485,14 @@ export default function RecipesScreen() {
                         )}
                         {state.adaptedIngredients && (
                           <View style={[styles.adaptResults, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
-                            <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>LIDL SUBSTITUTIONS</Text>
+                            <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('lidlSubs')}</Text>
                             {state.adaptedIngredients.map((item, i) => (
                               <View key={i} style={styles.adaptRow}>
                                 <View style={styles.adaptRowLeft}>
                                   <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
                                   {item.lidlProduct
                                     ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
-                                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>{t('notAtLidl')}</Text>
                                   }
                                   {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
                                 </View>
@@ -511,8 +513,8 @@ export default function RecipesScreen() {
                           ? <ActivityIndicator color={colors.background} size="small" />
                           : <Text style={[styles.saveBtnText, { color: state.savedOk ? colors.lime : colors.background }]}>
                               {state.savedOk
-                                ? `✓ Saved${state.adaptedIngredients ? ' with Lidl products' : ''}`
-                                : `Save to My Recipes${state.adaptedIngredients ? ' (with Lidl)' : ''}`}
+                                ? (state.adaptedIngredients ? t('savedLidl') : t('savedRecipe'))
+                                : t('saveRecipe')}
                             </Text>
                         }
                       </TouchableOpacity>
@@ -527,7 +529,7 @@ export default function RecipesScreen() {
         {/* ── Today's plan meals ───────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: colors.text3 }]}>
-            {TODAY}&apos;s Meals
+            {t('recipesPlanTitle')}
           </Text>
 
           {planLoading && (
@@ -607,7 +609,7 @@ export default function RecipesScreen() {
 
                     {hasLidl && (
                       <>
-                        <Text style={[styles.subheading, { color: colors.text3 }]}>FROM LIDL</Text>
+                        <Text style={[styles.subheading, { color: colors.text3 }]}>{t('fromLidl')}</Text>
                         {meal.lidl_products_used.map((p, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -619,7 +621,7 @@ export default function RecipesScreen() {
 
                     {meal.ingredients.length > 0 ? (
                       <>
-                        <Text style={[styles.subheading, { color: colors.text3, marginTop: hasLidl ? 14 : 0 }]}>INGREDIENTS</Text>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: hasLidl ? 14 : 0 }]}>{t('ingredients')}</Text>
                         {meal.ingredients.map((ing, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.surface3 }]} />
@@ -628,7 +630,7 @@ export default function RecipesScreen() {
                         ))}
                       </>
                     ) : (
-                      <Text style={[styles.noIngredientsText, { color: colors.text3 }]}>No ingredient details available for this meal.</Text>
+                      <Text style={[styles.noIngredientsText, { color: colors.text3 }]}>{t('noDetails')}</Text>
                     )}
 
                     {!alreadySaved && (
@@ -639,7 +641,7 @@ export default function RecipesScreen() {
                       >
                         {isSaving
                           ? <ActivityIndicator color={colors.background} size="small" />
-                          : <Text style={[styles.saveBtnText, { color: colors.background }]}>Save to My Recipes</Text>
+                          : <Text style={[styles.saveBtnText, { color: colors.background }]}>{t('saveRecipe')}</Text>
                         }
                       </TouchableOpacity>
                     )}

@@ -1,5 +1,7 @@
 import { AddFoodModal } from '@/components/AddFoodModal';
 import { Colors } from '@/constants/theme';
+import { DAY_FULL } from '@/constants/i18n';
+import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdaptedIngredient, adaptRecipeWithLidl, fetchMealSteps, Meal, saveUserRecipe } from '@/services/api';
@@ -22,6 +24,7 @@ const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 export default function TodayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
+  const { t, lang } = useLang();
   const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros, extraMeals, removeExtraMeal } = useMenu();
 
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
@@ -51,9 +54,9 @@ export default function TodayScreen() {
   const mealColorMap = [colors.orange, colors.lime, colors.blue, colors.orange];
 
   const macros = [
-    { label: 'PROTEIN', goalG: todayPlan?.protein_g ?? 0, eatenG: eatenMacros.protein_g, max: MACRO_MAX.protein, color: colors.lime },
-    { label: 'CARBS',   goalG: todayPlan?.carbs_g ?? 0,   eatenG: eatenMacros.carbs_g,   max: MACRO_MAX.carbs,   color: colors.blue },
-    { label: 'FAT',     goalG: todayPlan?.fat_g ?? 0,      eatenG: eatenMacros.fat_g,      max: MACRO_MAX.fat,     color: colors.orange },
+    { label: t('protein'), goalG: todayPlan?.protein_g ?? 0, eatenG: eatenMacros.protein_g, max: MACRO_MAX.protein, color: colors.lime },
+    { label: t('carbs'),   goalG: todayPlan?.carbs_g ?? 0,   eatenG: eatenMacros.carbs_g,   max: MACRO_MAX.carbs,   color: colors.blue },
+    { label: t('fat'),     goalG: todayPlan?.fat_g ?? 0,      eatenG: eatenMacros.fat_g,      max: MACRO_MAX.fat,     color: colors.orange },
   ];
 
   return (
@@ -61,7 +64,7 @@ export default function TodayScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.greeting, { color: colors.text3 }]}>Good morning 👊</Text>
-          <Text style={[styles.dayTitle, { color: colors.text }]}>{TODAY}</Text>
+          <Text style={[styles.dayTitle, { color: colors.text }]}>{DAY_FULL[lang][TODAY] ?? TODAY}</Text>
         </View>
 
         {/* Calorie ring */}
@@ -84,9 +87,9 @@ export default function TodayScreen() {
               ) : (
                 <>
                   <Text style={[styles.ringValue, { color: colors.text }]}>{eatenCalories.toLocaleString()}</Text>
-                  <Text style={[styles.ringSubText, { color: colors.text3 }]}>KCAL EATEN</Text>
+                  <Text style={[styles.ringSubText, { color: colors.text3 }]}>{t('todayKcalEaten')}</Text>
                   <Text style={[styles.ringRemaining, { color: colors.lime }]}>
-                    {remainingCalories.toLocaleString()} remaining
+                    {remainingCalories.toLocaleString()} {t('todayRemaining')}
                   </Text>
                 </>
               )}
@@ -122,14 +125,14 @@ export default function TodayScreen() {
 
         {/* Today's meals */}
         <View style={styles.planSection}>
-          <Text style={[styles.planTitle, { color: colors.text3 }]}>Today&apos;s Plan</Text>
+          <Text style={[styles.planTitle, { color: colors.text3 }]}>{t('todayTitle')}</Text>
 
           {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
 
           {isLoading && (
             <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <ActivityIndicator color={colors.lime} />
-              <Text style={[styles.loadingText, { color: colors.text3 }]}>Generating your meal plan…</Text>
+              <Text style={[styles.loadingText, { color: colors.text3 }]}>{t('todayGenerating')}</Text>
             </View>
           )}
 
@@ -161,7 +164,7 @@ export default function TodayScreen() {
                     onPress={() => logMeal(TODAY, index)}
                   >
                     <Text style={[styles.mealButtonText, { color: isLogged ? colors.text2 : colors.background }]}>
-                      {isLogged ? '✓ Logged' : 'Log'}
+                      {isLogged ? t('todayLogged') : t('todayLog')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -172,7 +175,7 @@ export default function TodayScreen() {
           {/* Extra items */}
           {(extraMeals[TODAY] ?? []).length > 0 && (
             <>
-              <Text style={[styles.planTitle, { color: colors.text3, marginTop: 16 }]}>Extra Items</Text>
+              <Text style={[styles.planTitle, { color: colors.text3, marginTop: 16 }]}>{t('todayExtra')}</Text>
               {(extraMeals[TODAY] ?? []).map(item => (
                 <View
                   key={item.id}
@@ -225,6 +228,7 @@ export default function TodayScreen() {
 }
 
 function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Meal; colors: any; onClose: () => void; steps?: string[]; stepsLoading?: boolean }) {
+  const { t } = useLang();
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [cheapening, setCheapening] = useState(false);
@@ -260,10 +264,10 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
   };
 
   const macroItems = [
-    { label: 'Protein', value: `${meal.protein_g}g`, color: colors.lime },
-    { label: 'Carbs',   value: `${meal.carbs_g}g`,   color: colors.blue },
-    { label: 'Fat',     value: `${meal.fat_g}g`,      color: colors.orange },
-    { label: 'Calories', value: `${meal.calories}`,   color: colors.text },
+    { label: t('protein'), value: `${meal.protein_g}g`, color: colors.lime },
+    { label: t('carbs'),   value: `${meal.carbs_g}g`,   color: colors.blue },
+    { label: t('fat'),     value: `${meal.fat_g}g`,      color: colors.orange },
+    { label: t('kcal'),    value: `${meal.calories}`,    color: colors.text },
   ];
 
   return (
@@ -296,7 +300,7 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
         {/* Ingredients */}
         {meal.ingredients.length > 0 && (
           <View style={styles.sheetSection}>
-            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>INGREDIENTS</Text>
+            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>{t('ingredients')}</Text>
             {meal.ingredients.map((ing, i) => (
               <View key={i} style={[styles.ingredientRow, { borderBottomColor: colors.border }]}>
                 <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -309,7 +313,7 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
         {/* Lidl products */}
         {meal.lidl_products_used.length > 0 && (
           <View style={styles.sheetSection}>
-            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>LIDL PRODUCTS</Text>
+            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>{t('fromLidl')}</Text>
             {meal.lidl_products_used.map((p, i) => (
               <View key={i} style={[styles.ingredientRow, { borderBottomColor: colors.border }]}>
                 <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
@@ -321,7 +325,7 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
 
         {/* Steps */}
         <View style={styles.sheetSection}>
-          <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>RECIPE</Text>
+          <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>{t('steps')}</Text>
           {stepsLoading
             ? <ActivityIndicator color={colors.lime} style={{ marginVertical: 8 }} />
             : (steps ?? []).map((step, i) => (
@@ -347,7 +351,7 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
               : <Text style={styles.sheetActionIcon}>🛒</Text>
             }
             <Text style={[styles.sheetActionText, { color: cheapening ? colors.text3 : colors.lime }]}>
-              {cheapening ? 'Finding Lidl matches…' : 'Cheapen with Lidl'}
+              {cheapening ? t('findingLidl') : t('todayCheapen')}
             </Text>
           </TouchableOpacity>
         )}
@@ -358,14 +362,14 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
         {/* Lidl substitutions */}
         {adaptedIngredients && (
           <View style={[styles.sheetSection, styles.adaptBox, { backgroundColor: colors.surface3, borderColor: colors.border }]}>
-            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>LIDL SUBSTITUTIONS</Text>
+            <Text style={[styles.sheetSectionTitle, { color: colors.text3 }]}>{t('lidlSubs')}</Text>
             {adaptedIngredients.map((item, i) => (
               <View key={i} style={styles.adaptRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
                   {item.lidlProduct
                     ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
-                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>{t('notAtLidl')}</Text>
                   }
                   {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
                 </View>
@@ -385,8 +389,8 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
             ? <ActivityIndicator color={colors.background} size="small" />
             : <Text style={[styles.sheetSaveBtnText, { color: savedOk ? colors.lime : colors.background }]}>
                 {savedOk
-                  ? `✓ Saved${adaptedIngredients ? ' with Lidl' : ''}`
-                  : `Save to My Recipes${adaptedIngredients ? ' (with Lidl)' : ''}`}
+                  ? (adaptedIngredients ? t('savedLidl') : t('savedRecipe'))
+                  : t('saveRecipe')}
               </Text>
           }
         </TouchableOpacity>

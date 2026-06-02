@@ -9,6 +9,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PROFILE, UserProfile } from '@/context/ProfileContext';
 import { Colors } from '@/constants/theme';
+import { useLang } from '@/context/LangContext';
 
 const C = Colors.dark;
 
@@ -31,6 +32,7 @@ function calcRecommended(p: UserProfile, deficitKcal: number): number {
 
 export default function Onboarding() {
   const router = useRouter();
+  const { t } = useLang();
   const [idx, setIdx] = useState(0);
   const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -139,18 +141,16 @@ export default function Onboarding() {
             <View style={s.stepWrap}>
               <Text style={s.bigEmoji}>🥗</Text>
               <Text style={s.heading}>Lydo</Text>
-              <Text style={s.sub}>Your AI-powered nutrition companion</Text>
-              <Text style={s.body}>
-                Get personalized weekly meal plans, track your calories, and shop smart at Lidl.
-              </Text>
-              <Btn label="Get Started" onPress={() => setIdx(1)} />
+              <Text style={s.sub}>{t('ob_tagline')}</Text>
+              <Text style={s.body}>{t('ob_body')}</Text>
+              <Btn label={t('ob_cta')} onPress={() => setIdx(1)} />
             </View>
           )}
 
           {step === 'auth' && (
             <View style={s.stepWrap}>
-              <Text style={s.heading}>Welcome</Text>
-              <Text style={s.sub}>Sign in to get started</Text>
+              <Text style={s.heading}>{t('ob_authTitle')}</Text>
+              <Text style={s.sub}>{t('ob_authSub')}</Text>
 
               {authError ? <Text style={s.error}>{authError}</Text> : null}
 
@@ -168,60 +168,58 @@ export default function Onboarding() {
                 </View>
               )}
 
-              <Text style={s.privacyNote}>
-                Your Apple ID is used only for authentication. We never see your password.
-              </Text>
+              <Text style={s.privacyNote}>{t('ob_applePrivacy')}</Text>
             </View>
           )}
 
           {step === 'personal' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>About You</Text>
-              <Text style={s.sub}>Help us personalize your experience</Text>
-              <Field label="Name" value={draft.name} onChangeText={v => upd({ name: v })} />
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_personalTitle')}</Text>
+              <Text style={s.sub}>{t('ob_personalSub')}</Text>
+              <Field label={t('ob_name')} value={draft.name} onChangeText={v => upd({ name: v })} />
               <Field
-                label="Age"
+                label={t('ob_age')}
                 value={draft.age?.toString() ?? ''}
                 onChangeText={v => upd({ age: v ? (parseInt(v) || null) : null })}
                 keyboardType="number-pad"
               />
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'body' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Your Body</Text>
-              <Text style={s.sub}>Used to calculate your energy needs</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_bodyTitle')}</Text>
+              <Text style={s.sub}>{t('ob_bodySub')}</Text>
 
               <Field
-                label="Height (cm)"
+                label={t('ob_height')}
                 value={draft.height_cm?.toString() ?? ''}
                 onChangeText={v => upd({ height_cm: v ? (parseFloat(v) || null) : null })}
                 keyboardType="decimal-pad"
               />
               <Field
-                label="Weight (kg)"
+                label={t('ob_weight')}
                 value={draft.weight_kg?.toString() ?? ''}
                 onChangeText={v => upd({ weight_kg: v ? (parseFloat(v) || null) : null })}
                 keyboardType="decimal-pad"
               />
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'goal' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Your Goal</Text>
-              <Text style={s.sub}>What are you trying to achieve?</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_goalTitle')}</Text>
+              <Text style={s.sub}>{t('ob_goalSub')}</Text>
               {(
                 [
-                  { id: 'lose', label: 'Lose Weight', desc: '~300 kcal deficit per day' },
-                  { id: 'maintain', label: 'Maintain Weight', desc: 'Eat at your TDEE' },
-                  { id: 'gain', label: 'Gain Weight', desc: '~300 kcal surplus per day' },
+                  { id: 'lose',     label: t('ob_lose'),     desc: t('ob_loseDesc') },
+                  { id: 'maintain', label: t('ob_maintain'), desc: t('ob_maintainDesc') },
+                  { id: 'gain',     label: t('ob_gain'),     desc: t('ob_gainDesc') },
                 ] as const
               ).map(opt => (
                 <TouchableOpacity
@@ -233,20 +231,20 @@ export default function Onboarding() {
                   <Text style={s.optDesc}>{opt.desc}</Text>
                 </TouchableOpacity>
               ))}
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'deficit' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Calorie Deficit</Text>
-              <Text style={s.sub}>How aggressive do you want your cut?</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_deficitTitle')}</Text>
+              <Text style={s.sub}>{t('ob_deficitSub')}</Text>
               {(
                 [
-                  { kcal: 250, label: 'Small Deficit',  desc: '−250 kcal/day · Slow, sustainable loss (~0.25 kg/week)' },
-                  { kcal: 500, label: 'Medium Deficit', desc: '−500 kcal/day · Steady loss (~0.5 kg/week)' },
-                  { kcal: 750, label: 'Big Deficit',    desc: '−750 kcal/day · Faster loss (~0.75 kg/week)' },
+                  { kcal: 250, label: t('ob_defSmall'), desc: t('ob_defSmallDesc') },
+                  { kcal: 500, label: t('ob_defMed'),   desc: t('ob_defMedDesc') },
+                  { kcal: 750, label: t('ob_defBig'),   desc: t('ob_defBigDesc') },
                 ] as const
               ).map(opt => (
                 <TouchableOpacity
@@ -262,12 +260,12 @@ export default function Onboarding() {
                 style={[s.optCard, customDeficit !== '' && s.optCardActive]}
                 onPress={() => { if (customDeficit === '') setCustomDeficit('400'); }}
               >
-                <Text style={[s.optLabel, customDeficit !== '' && s.optLabelActive]}>Custom</Text>
-                <Text style={s.optDesc}>Set your own daily calorie deficit</Text>
+                <Text style={[s.optLabel, customDeficit !== '' && s.optLabelActive]}>{t('custom')}</Text>
+                <Text style={s.optDesc}>{t('ob_defCustomDesc')}</Text>
               </TouchableOpacity>
               {customDeficit !== '' && (
                 <Field
-                  label="My deficit (kcal/day)"
+                  label={t('ob_defMyLabel')}
                   value={customDeficit}
                   onChangeText={v => {
                     setCustomDeficit(v);
@@ -277,22 +275,22 @@ export default function Onboarding() {
                   keyboardType="number-pad"
                 />
               )}
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'activity' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Activity Level</Text>
-              <Text style={s.sub}>How active are you on a typical week?</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_activityTitle')}</Text>
+              <Text style={s.sub}>{t('ob_activitySub')}</Text>
               {(
                 [
-                  { id: 'sedentary', label: 'Sedentary', desc: 'Little or no exercise' },
-                  { id: 'light', label: 'Light', desc: 'Exercise 1–3 days/week' },
-                  { id: 'moderate', label: 'Moderate', desc: 'Exercise 3–5 days/week' },
-                  { id: 'active', label: 'Active', desc: 'Hard exercise 6–7 days/week' },
-                  { id: 'very_active', label: 'Very Active', desc: 'Very hard exercise or physical job' },
+                  { id: 'sedentary',  label: t('ob_sedentary'),  desc: t('ob_sedentaryDesc') },
+                  { id: 'light',      label: t('ob_light'),      desc: t('ob_lightDesc') },
+                  { id: 'moderate',   label: t('ob_moderate'),   desc: t('ob_moderateDesc') },
+                  { id: 'active',     label: t('ob_active'),     desc: t('ob_activeDesc') },
+                  { id: 'very_active',label: t('ob_veryActive'), desc: t('ob_veryActiveDesc') },
                 ] as const
               ).map(opt => (
                 <TouchableOpacity
@@ -304,49 +302,49 @@ export default function Onboarding() {
                   <Text style={s.optDesc}>{opt.desc}</Text>
                 </TouchableOpacity>
               ))}
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'nutrition' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Nutrition Goals</Text>
-              <Text style={s.sub}>Fine-tune your daily targets</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_nutritionTitle')}</Text>
+              <Text style={s.sub}>{t('ob_nutritionSub')}</Text>
               {(draft.height_cm && draft.weight_kg && draft.age) ? (
                 <View style={s.hintBox}>
-                  <Text style={s.hintText}>Estimated TDEE: {calcTDEE(draft)} kcal/day</Text>
+                  <Text style={s.hintText}>{t('ob_tdeeLabel')}: {calcTDEE(draft)} {t('ob_tdeeUnit')}</Text>
                 </View>
               ) : null}
               <Field
-                label="Daily Calories (kcal)"
+                label={t('ob_dailyCal')}
                 value={draft.daily_calories.toString()}
                 onChangeText={v => upd({ daily_calories: v ? (parseInt(v) || 2000) : 2000 })}
                 keyboardType="number-pad"
               />
               <Field
-                label="Food Preferences"
+                label={t('ob_prefs')}
                 value={draft.preferences}
                 onChangeText={v => upd({ preferences: v })}
-                placeholder="e.g. Mediterranean, low-carb…"
+                placeholder={t('ob_prefsPlaceholder')}
                 multiline
               />
               <Field
-                label="Dietary Restrictions"
+                label={t('ob_restrictions')}
                 value={draft.dietary_restrictions}
                 onChangeText={v => upd({ dietary_restrictions: v })}
-                placeholder="e.g. gluten-free, nut allergy…"
+                placeholder={t('ob_restrictionsPlaceholder')}
                 multiline
               />
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'budget' && (
             <View style={s.stepWrap}>
-              <BackBtn onPress={back} />
-              <Text style={s.heading}>Weekly Budget</Text>
-              <Text style={s.sub}>How much do you spend on groceries per week?</Text>
+              <BackBtn label={t('back')} onPress={back} />
+              <Text style={s.heading}>{t('ob_budgetTitle')}</Text>
+              <Text style={s.sub}>{t('ob_budgetSub')}</Text>
               <View style={s.quickRow}>
                 {[50, 80, 100, 150].map(v => (
                   <TouchableOpacity
@@ -359,24 +357,22 @@ export default function Onboarding() {
                 ))}
               </View>
               <Field
-                label="Or enter a custom amount (€)"
+                label={t('ob_budgetCustom')}
                 value={draft.weekly_budget_eur.toString()}
                 onChangeText={v => upd({ weekly_budget_eur: v ? (parseFloat(v) || 80) : 80 })}
                 keyboardType="decimal-pad"
               />
-              <Btn label="Continue" onPress={next} />
+              <Btn label={t('continue')} onPress={next} />
             </View>
           )}
 
           {step === 'done' && (
             <View style={s.stepWrap}>
               <Text style={s.bigEmoji}>🎉</Text>
-              <Text style={s.heading}>You're all set!</Text>
-              <Text style={s.sub}>Your profile is ready</Text>
-              <Text style={s.body}>
-                We'll generate your first personalized weekly meal plan based on your goals and preferences.
-              </Text>
-              <Btn label="Start Tracking" onPress={doFinish} loading={loading} />
+              <Text style={s.heading}>{t('ob_doneTitle')}</Text>
+              <Text style={s.sub}>{t('ob_doneSub')}</Text>
+              <Text style={s.body}>{t('ob_doneBody')}</Text>
+              <Btn label={t('ob_doneCta')} onPress={doFinish} loading={loading} />
             </View>
           )}
 
@@ -398,10 +394,10 @@ function Btn({ label, onPress, loading }: { label: string; onPress: () => void; 
   );
 }
 
-function BackBtn({ onPress }: { onPress: () => void }) {
+function BackBtn({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <TouchableOpacity style={s.backBtn} onPress={onPress}>
-      <Text style={s.backBtnText}>← Back</Text>
+      <Text style={s.backBtnText}>{label}</Text>
     </TouchableOpacity>
   );
 }

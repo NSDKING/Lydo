@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LangProvider } from '@/context/LangContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -14,6 +15,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
+    <LangProvider>
     <ShareIntentProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
@@ -25,5 +27,6 @@ export default function RootLayout() {
         <StatusBar style="auto" />
       </ThemeProvider>
     </ShareIntentProvider>
+    </LangProvider>
   );
 }

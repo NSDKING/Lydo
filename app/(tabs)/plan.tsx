@@ -1,4 +1,6 @@
 import { Colors } from '@/constants/theme';
+import { DAY_NAMES } from '@/constants/i18n';
+import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -30,16 +32,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const DAYS = [
-  { key: 'Monday',    short: 'Mon' },
-  { key: 'Tuesday',   short: 'Tue' },
-  { key: 'Wednesday', short: 'Wed' },
-  { key: 'Thursday',  short: 'Thu' },
-  { key: 'Friday',    short: 'Fri' },
-  { key: 'Saturday',  short: 'Sat' },
-  { key: 'Sunday',    short: 'Sun' },
-];
-const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
 type SwapPhase = 'choose' | 'ai' | 'my-recipes' | 'loading' | 'preview';
@@ -63,6 +56,8 @@ interface SwapState {
 export default function PlanScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
+  const { t, lang } = useLang();
+  const MEAL_TYPES = [t('breakfast'), t('lunch'), t('dinner'), t('snack')];
   const {
     isLoading, error, refresh,
     loggedMeals, logMeal,
@@ -237,15 +232,15 @@ export default function PlanScreen() {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={[styles.weekLabel, { color: colors.lime }]}>THIS WEEK</Text>
-              <Text style={[styles.title, { color: colors.text }]}>Meal Plan</Text>
+              <Text style={[styles.weekLabel, { color: colors.lime }]}>{t('planThisWeek')}</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{t('planTitle')}</Text>
             </View>
             <TouchableOpacity
               style={[styles.regenBtn, { borderColor: colors.border2, backgroundColor: colors.surface2 }]}
               onPress={refresh} disabled={isLoading}
             >
               <Text style={[styles.regenIcon, { color: colors.text2 }]}>⟳</Text>
-              <Text style={[styles.regenText, { color: colors.text2 }]}>{isLoading ? 'Generating…' : 'Regenerate'}</Text>
+              <Text style={[styles.regenText, { color: colors.text2 }]}>{isLoading ? t('planGenerating') : t('planRegenerate')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -274,15 +269,15 @@ export default function PlanScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={styles.dayScroll} contentContainerStyle={styles.dayScrollContent}>
           {DAYS.map(day => {
-            const active = selectedDay === day.key;
+            const active = selectedDay === day;
             return (
-              <TouchableOpacity key={day.key}
+              <TouchableOpacity key={day}
                 style={[styles.dayChip, { backgroundColor: colors.surface, borderColor: colors.border },
                   active && { borderColor: colors.lime, backgroundColor: colors.limeDim }]}
-                onPress={() => { setSelectedDay(day.key); setExpandedMeal(null); setEditingIdx(null); }}
+                onPress={() => { setSelectedDay(day); setExpandedMeal(null); setEditingIdx(null); }}
               >
-                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{day.short}</Text>
-                <Text style={[styles.dayChipName, { color: active ? colors.lime : colors.text2 }]}>{day.key.slice(0, 3)}</Text>
+                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{DAY_NAMES[lang][day]}</Text>
+                <Text style={[styles.dayChipName, { color: active ? colors.lime : colors.text2 }]}>{DAY_NAMES[lang][day]}</Text>
               </TouchableOpacity>
             );
           })}
@@ -290,14 +285,14 @@ export default function PlanScreen() {
 
         <View style={[styles.daySummary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View>
-            <Text style={[styles.dsLabel, { color: colors.text3 }]}>Day Total</Text>
+            <Text style={[styles.dsLabel, { color: colors.text3 }]}>{t('planDayTotal')}</Text>
             <Text style={[styles.dsVal, { color: colors.text }]}>
               <Text style={{ color: colors.lime }}>{dayPlan ? dayPlan.total_calories.toLocaleString() : '—'}</Text>{' kcal'}
             </Text>
           </View>
           <View style={styles.dsBarWrap}>
             <View style={styles.dsBarLabel}>
-              <Text style={[styles.dsBarText, { color: colors.text3 }]}>Goal</Text>
+              <Text style={[styles.dsBarText, { color: colors.text3 }]}>{t('goal')}</Text>
               <Text style={[styles.dsBarText, { color: colors.text3 }]}>{barPercent}%</Text>
             </View>
             <View style={[styles.dsBarTrack, { backgroundColor: colors.surface3 }]}>
@@ -310,7 +305,7 @@ export default function PlanScreen() {
           {isLoading && (
             <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <ActivityIndicator color={colors.lime} />
-              <Text style={[styles.loadingText, { color: colors.text3 }]}>Generating your meal plan…</Text>
+              <Text style={[styles.loadingText, { color: colors.text3 }]}>{t('todayGenerating')}</Text>
             </View>
           )}
           {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
@@ -417,14 +412,14 @@ export default function PlanScreen() {
                       onPress={(e) => { e.stopPropagation?.(); lockMeal(selectedDay, idx); }}
                     >
                       <Text style={styles.actionBtnIcon}>{isLocked ? '🔒' : '🔓'}</Text>
-                      <Text style={[styles.actionBtnLabel, { color: isLocked ? colors.lime : colors.text3 }]}>{isLocked ? 'Locked' : 'Lock'}</Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLocked ? colors.lime : colors.text3 }]}>{isLocked ? t('planLocked') : t('planLock')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border }]}
                       onPress={(e) => { e.stopPropagation?.(); setEditDraft(meal.name); setEditingIdx(idx); }}
                     >
                       <Text style={styles.actionBtnIcon}>✏️</Text>
-                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Edit</Text>
+                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>{t('planEdit')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: colors.border, opacity: isLocked ? 0.4 : 1 }]}
@@ -432,14 +427,14 @@ export default function PlanScreen() {
                       disabled={isLocked || isSwapping}
                     >
                       <Text style={styles.actionBtnIcon}>🔁</Text>
-                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>Swap</Text>
+                      <Text style={[styles.actionBtnLabel, { color: colors.text3 }]}>{t('planSwap')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionBtn, { borderColor: isLogged ? colors.lime : colors.border, backgroundColor: isLogged ? colors.limeDim : 'transparent' }]}
                       onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
                     >
                       <Text style={styles.actionBtnIcon}>{isLogged ? '✅' : '☑️'}</Text>
-                      <Text style={[styles.actionBtnLabel, { color: isLogged ? colors.lime : colors.text3 }]}>{isLogged ? 'Logged' : 'Log'}</Text>
+                      <Text style={[styles.actionBtnLabel, { color: isLogged ? colors.lime : colors.text3 }]}>{isLogged ? t('todayLogged') : t('planLog')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -449,7 +444,7 @@ export default function PlanScreen() {
                   onPress={(e) => { e.stopPropagation?.(); logMeal(selectedDay, idx); }}
                 >
                   <Text style={[styles.logBtnText, { color: isLogged ? colors.text2 : colors.background }]}>
-                    {isLogged ? '✓ Logged' : 'Log Meal'}
+                    {isLogged ? t('todayLogged') : t('planLogMeal')}
                   </Text>
                 </TouchableOpacity>
               </TouchableOpacity>
@@ -501,13 +496,14 @@ interface SwapModalProps {
 }
 
 function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecipe, onCheapen, onApplyCheapen, onConfirm, onPatch, onClose }: SwapModalProps) {
+  const { t } = useLang();
   const set = (p: Partial<SwapState>) => onPatch(p);
 
   return (
     <>
       <View style={styles.sheetHandle} />
       <View style={styles.modalHeader}>
-        <Text style={[styles.modalTitle, { color: colors.text }]}>Swap Meal</Text>
+        <Text style={[styles.modalTitle, { color: colors.text }]}>{t('planSwapTitle')}</Text>
         <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.surface3 }]} onPress={onClose}>
           <Text style={[styles.closeBtnText, { color: colors.text2 }]}>✕</Text>
         </TouchableOpacity>
@@ -523,16 +519,16 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
               onPress={() => set({ phase: 'ai' })}
             >
               <Text style={styles.chooseIcon}>🤖</Text>
-              <Text style={[styles.chooseTitle, { color: colors.text }]}>AI Generate</Text>
-              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Let AI suggest a new meal, optionally with your preferences</Text>
+              <Text style={[styles.chooseTitle, { color: colors.text }]}>{t('planAiGenerate')}</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>{t('planAiDesc')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.chooseCard, { borderColor: colors.blue, backgroundColor: `${colors.blue}10` }]}
               onPress={onLoadMyRecipes}
             >
               <Text style={styles.chooseIcon}>📖</Text>
-              <Text style={[styles.chooseTitle, { color: colors.text }]}>My Recipes</Text>
-              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>Pick from your saved personal recipes</Text>
+              <Text style={[styles.chooseTitle, { color: colors.text }]}>{t('planMyRecipes')}</Text>
+              <Text style={[styles.chooseDesc, { color: colors.text3 }]}>{t('planMyRecipesDesc')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -540,10 +536,10 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
         {/* ── ai input ── */}
         {state.phase === 'ai' && (
           <View style={styles.inputPhase}>
-            <Text style={[styles.inputLabel, { color: colors.text3 }]}>PREFERENCES (OPTIONAL)</Text>
+            <Text style={[styles.inputLabel, { color: colors.text3 }]}>{t('planPrefsLabel')}</Text>
             <TextInput
               style={[styles.textArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
-              placeholder="e.g. high protein, vegetarian, quick to make…"
+              placeholder={t('planPrefsPlaceholder')}
               placeholderTextColor={colors.text3}
               value={state.preferences}
               onChangeText={v => set({ preferences: v })}
@@ -551,10 +547,10 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
             />
             {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onAIGenerate}>
-              <Text style={[styles.primaryBtnText, { color: colors.background }]}>Generate Meal</Text>
+              <Text style={[styles.primaryBtnText, { color: colors.background }]}>{t('planGenerateMeal')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.backBtn} onPress={() => set({ phase: 'choose', error: null })}>
-              <Text style={[styles.backBtnText, { color: colors.text3 }]}>← Back</Text>
+              <Text style={[styles.backBtnText, { color: colors.text3 }]}>{t('back')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -565,14 +561,14 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
             {state.loadingRecipes && (
               <View style={styles.loadingPhase}>
                 <ActivityIndicator color={colors.lime} size="large" />
-                <Text style={[styles.loadingMsg, { color: colors.text3 }]}>Loading your recipes…</Text>
+                <Text style={[styles.loadingMsg, { color: colors.text3 }]}>{t('planLoadingRecipes')}</Text>
               </View>
             )}
             {!state.loadingRecipes && state.userRecipes.length === 0 && (
               <View style={styles.emptyRecipes}>
                 <Text style={styles.emptyIcon}>📭</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved recipes yet</Text>
-                <Text style={[styles.emptyDesc, { color: colors.text3 }]}>Save a meal from the Today tab or after generating an AI swap</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('planNoRecipes')}</Text>
+                <Text style={[styles.emptyDesc, { color: colors.text3 }]}>{t('planNoRecipesDesc')}</Text>
               </View>
             )}
             {!state.loadingRecipes && state.userRecipes.map(r => (
@@ -587,7 +583,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
                     {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · F {r.fat_g}g
                   </Text>
                   {r.lidl_products_used.length > 0 && (
-                    <Text style={[styles.savedRecipeLidl, { color: colors.lime }]}>🛒 Lidl products included</Text>
+                    <Text style={[styles.savedRecipeLidl, { color: colors.lime }]}>{t('planLidlIncluded')}</Text>
                   )}
                 </View>
                 <Text style={[styles.savedRecipeArrow, { color: colors.text3 }]}>›</Text>
@@ -595,7 +591,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
             ))}
             {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
             <TouchableOpacity style={[styles.backBtn, { marginTop: 12 }]} onPress={() => set({ phase: 'choose', error: null })}>
-              <Text style={[styles.backBtnText, { color: colors.text3 }]}>← Back</Text>
+              <Text style={[styles.backBtnText, { color: colors.text3 }]}>{t('back')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -604,14 +600,14 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
         {state.phase === 'loading' && (
           <View style={styles.loadingPhase}>
             <ActivityIndicator color={colors.lime} size="large" />
-            <Text style={[styles.loadingMsg, { color: colors.text3 }]}>Generating your meal…</Text>
+            <Text style={[styles.loadingMsg, { color: colors.text3 }]}>{t('planGeneratingMeal')}</Text>
           </View>
         )}
 
         {/* ── preview ── */}
         {state.phase === 'preview' && state.candidate && (
           <View style={styles.previewPhase}>
-            <Text style={[styles.inputLabel, { color: colors.text3 }]}>NEW MEAL PREVIEW</Text>
+            <Text style={[styles.inputLabel, { color: colors.text3 }]}>{t('planPreview')}</Text>
 
             {/* Candidate card */}
             <View style={[styles.previewCard, { backgroundColor: colors.surface2, borderColor: colors.lime }]}>
@@ -631,7 +627,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
               </View>
               {state.candidate.ingredients.length > 0 && (
                 <View style={styles.previewIngredients}>
-                  <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 6 }]}>INGREDIENTS</Text>
+                  <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 6 }]}>{t('ingredients')}</Text>
                   {state.candidate.ingredients.map((ing, i) => (
                     <Text key={i} style={[styles.previewIngr, { color: colors.text2 }]}>• {ing}</Text>
                   ))}
@@ -639,7 +635,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
               )}
               {state.candidate.lidl_products_used.length > 0 && (
                 <View style={[styles.lidlApplied, { backgroundColor: `${colors.lime}12`, borderColor: `${colors.lime}30` }]}>
-                  <Text style={[styles.lidlAppliedTitle, { color: colors.lime }]}>🛒 Lidl products applied</Text>
+                  <Text style={[styles.lidlAppliedTitle, { color: colors.lime }]}>{t('planLidlApplied')}</Text>
                   {state.candidate.lidl_products_used.map((p, i) => (
                     <Text key={i} style={[styles.previewIngr, { color: colors.lime }]}>• {p}</Text>
                   ))}
@@ -659,7 +655,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
                   : <Text style={styles.cheapenIcon}>🛒</Text>
                 }
                 <Text style={[styles.cheapenText, { color: colors.lime }]}>
-                  {state.cheapening ? 'Finding Lidl substitutes…' : 'Cheapen with Lidl'}
+                  {state.cheapening ? t('planFindingSubs') : t('todayCheapen')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -668,13 +664,13 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
             {/* Substitution results */}
             {state.adaptedIngredients && (
               <View style={[styles.cheapenResults, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
-                <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 10 }]}>LIDL SUBSTITUTIONS</Text>
+                <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 10 }]}>{t('lidlSubs')}</Text>
                 {state.adaptedIngredients.map((item, i) => (
                   <View key={i} style={[styles.substitutionRow, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.subOriginal, { color: colors.text3 }]}>{item.original}</Text>
                     {item.lidlProduct
                       ? <Text style={[styles.subProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
-                      : <Text style={[styles.subProduct, { color: colors.text3 }]}>→ Not available at Lidl</Text>
+                      : <Text style={[styles.subProduct, { color: colors.text3 }]}>{t('notAtLidl')}</Text>
                     }
                     {item.note ? <Text style={[styles.subNote, { color: colors.text3 }]}>{item.note}</Text> : null}
                   </View>
@@ -683,14 +679,14 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
                   style={[styles.applyBtn, { backgroundColor: colors.lime }]}
                   onPress={onApplyCheapen}
                 >
-                  <Text style={[styles.primaryBtnText, { color: colors.background }]}>Apply Lidl substitutions</Text>
+                  <Text style={[styles.primaryBtnText, { color: colors.background }]}>{t('planApplySubs')}</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {/* Save to My Recipes toggle */}
             <View style={[styles.saveToggleRow, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
-              <Text style={[styles.saveToggleLabel, { color: colors.text }]}>Save to My Recipes</Text>
+              <Text style={[styles.saveToggleLabel, { color: colors.text }]}>{t('saveRecipe')}</Text>
               <Switch
                 value={state.saveToRecipes}
                 onValueChange={v => set({ saveToRecipes: v })}
@@ -700,13 +696,13 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
             </View>
 
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.lime }]} onPress={onConfirm}>
-              <Text style={[styles.primaryBtnText, { color: colors.background }]}>Use This Meal</Text>
+              <Text style={[styles.primaryBtnText, { color: colors.background }]}>{t('planUseMeal')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.secondaryBtn, { borderColor: colors.border }]}
               onPress={() => set({ phase: state.userRecipes.length > 0 ? 'my-recipes' : 'ai', candidate: null, adaptedIngredients: null })}
             >
-              <Text style={[styles.secondaryBtnText, { color: colors.text2 }]}>Try Again</Text>
+              <Text style={[styles.secondaryBtnText, { color: colors.text2 }]}>{t('tryAgain')}</Text>
             </TouchableOpacity>
           </View>
         )}
