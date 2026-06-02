@@ -192,9 +192,15 @@ export default function ShopScreen() {
 
   const aisleMap = useMemo((): Map<string, GroceryItem[]> => {
     if (!plan) return new Map();
+    const ORDERED = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const todayIdx  = ORDERED.indexOf(todayName);
+    // Only include today + future days so past groceries drop off automatically
+    const remainingDays = plan.days.filter(d => ORDERED.indexOf(d.day) >= todayIdx);
+
     const lSeen = new Set<string>(), oSeen = new Set<string>();
     const items: GroceryItem[] = [];
-    for (const day of plan.days) {
+    for (const day of remainingDays) {
       for (const meal of day.meals) {
         for (const p of meal.lidl_products_used) {
           const k = p.toLowerCase().trim();
@@ -408,7 +414,7 @@ export default function ShopScreen() {
             <View style={[styles.budgetCard, { backgroundColor: C.surface, borderColor: overBudget ? `${C.orange}60` : C.border }]}>
               <View style={styles.budgetRow}>
                 <Text style={[styles.budgetLabel, { color: C.text3 }]}>
-                  {'Estimated spend'}
+                  {'Lidl prices only'}
                   {pantryCount > 0 ? ` · ${pantryCount} in pantry` : ''}
                 </Text>
                 <Text style={[styles.budgetAmount, { color: overBudget ? C.orange : C.text }]}>

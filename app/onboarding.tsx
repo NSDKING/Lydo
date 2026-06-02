@@ -50,39 +50,7 @@ export default function Onboarding() {
   const [deficitKcal, setDeficitKcal] = useState(500);
   const [customDeficit, setCustomDeficit] = useState('');
   const [healthLoading, setHealthLoading] = useState(false);
-
-  const importFromHealth = () => {
-    if (Platform.OS !== 'ios') return;
-    setHealthLoading(true);
-    AppleHealthKit.initHealthKit(HEALTH_PERMISSIONS, (err) => {
-      if (err) { setHealthLoading(false); return; }
-
-      AppleHealthKit.getLatestHeight({}, (hErr, height) => {
-        if (!hErr && height?.value) upd({ height_cm: Math.round(height.value * 2.54) });
-      });
-
-      AppleHealthKit.getLatestWeight({ unit: 'gram' as any }, (wErr, weight) => {
-        if (!wErr && weight?.value) upd({ weight_kg: parseFloat((weight.value / 1000).toFixed(1)) });
-      });
-
-      // Estimate activity level from average daily steps over the last 7 days
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      AppleHealthKit.getDailyStepCountSamples(
-        { startDate: weekAgo, endDate: new Date().toISOString() },
-        (sErr, samples) => {
-          setHealthLoading(false);
-          if (sErr || !samples?.length) return;
-          const avg = samples.reduce((s, r) => s + r.value, 0) / samples.length;
-          const level =
-            avg < 5000  ? 'sedentary' :
-            avg < 7500  ? 'light'     :
-            avg < 10000 ? 'moderate'  :
-            avg < 12500 ? 'active'    : 'very_active';
-          upd({ activity_level: level as UserProfile['activity_level'] });
-        },
-      );
-    });
-  };
+  const [healthError, setHealthError] = useState('');
 
   const step = STEPS[idx];
   const isProgressStep = step !== 'welcome' && step !== 'done';
@@ -90,6 +58,51 @@ export default function Onboarding() {
   const progressPct = isProgressStep ? progressIdx / TOTAL_PROGRESS : step === 'done' ? 1 : 0;
 
   const upd = (f: Partial<UserProfile>) => setDraft(p => ({ ...p, ...f }));
+
+  const importFromHealth = () => {
+    if (Platform.OS !== 'ios') return;
+    setHealthLoading(true);
+    setHealthError('');
+    try {
+      AppleHealthKit.initHealthKit(HEALTH_PERMISSIONS, (err) => {
+        if (err) {
+          setHealthLoading(false);
+          setHealthError('Could not access Apple Health. Allow access in Settings → Health → Lydo.');
+          return;
+        }
+
+        // Height: HealthKit returns inches — convert to cm
+        AppleHealthKit.getLatestHeight({}, (_hErr, height) => {
+          if (!_hErr && height?.value) upd({ height_cm: Math.round(height.value * 2.54) });
+        });
+
+        // Weight: request in kg directly
+        AppleHealthKit.getLatestWeight({ unit: 'kilogram' as any }, (_wErr, weight) => {
+          if (!_wErr && weight?.value) upd({ weight_kg: parseFloat(weight.value.toFixed(1)) });
+        });
+
+        // Estimate activity from average daily steps over last 7 days
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        AppleHealthKit.getDailyStepCountSamples(
+          { startDate: weekAgo, endDate: new Date().toISOString() },
+          (_sErr, samples) => {
+            setHealthLoading(false);
+            if (_sErr || !samples?.length) return;
+            const avg = samples.reduce((s, r) => s + r.value, 0) / samples.length;
+            const level =
+              avg < 5000  ? 'sedentary' :
+              avg < 7500  ? 'light'     :
+              avg < 10000 ? 'moderate'  :
+              avg < 12500 ? 'active'    : 'very_active';
+            upd({ activity_level: level as UserProfile['activity_level'] });
+          },
+        );
+      });
+    } catch {
+      setHealthLoading(false);
+      setHealthError('Apple Health is not available. Make sure you are using a device build (not Expo Go).');
+    }
+  };
 
   const back = () => {
     if (step === 'activity' && draft.goal !== 'lose') {
@@ -244,19 +257,22 @@ export default function Onboarding() {
               <Text style={s.sub}>Used to calculate your energy needs</Text>
 
               {Platform.OS === 'ios' && (
-                <TouchableOpacity
-                  style={[s.healthBtn, healthLoading && { opacity: 0.6 }]}
-                  onPress={importFromHealth}
-                  disabled={healthLoading}
-                >
-                  {healthLoading
-                    ? <ActivityIndicator color={C.lime} size="small" style={{ marginRight: 8 }} />
-                    : <Text style={s.healthBtnIcon}>❤️</Text>
-                  }
-                  <Text style={s.healthBtnText}>
-                    {healthLoading ? 'Reading from Health…' : 'Import from Apple Health'}
-                  </Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[s.healthBtn, healthLoading && { opacity: 0.6 }]}
+                    onPress={importFromHealth}
+                    disabled={healthLoading}
+                  >
+                    {healthLoading
+                      ? <ActivityIndicator color={C.lime} size="small" style={{ marginRight: 8 }} />
+                      : <Text style={s.healthBtnIcon}>❤️</Text>
+                    }
+                    <Text style={s.healthBtnText}>
+                      {healthLoading ? 'Reading from Health…' : 'Import from Apple Health'}
+                    </Text>
+                  </TouchableOpacity>
+                  {healthError ? <Text style={[s.error, { marginTop: -8, marginBottom: 8 }]}>{healthError}</Text> : null}
+                </>
               )}
 
               <Field
