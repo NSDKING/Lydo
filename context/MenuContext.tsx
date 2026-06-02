@@ -5,6 +5,7 @@ import {
   Meal,
   MenuPlan,
   TiktokRecipe,
+  clearWeeklyPlan,
   fetchWeeklyPlan,
   generateMenuPlan,
   getWeekKey,
@@ -108,6 +109,9 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
           setPlan(cached);
           return;
         }
+      } else if (userId) {
+        // Clear the cached plan so the server guard doesn't block regeneration
+        await clearWeeklyPlan(userId).catch(() => {});
       }
 
       // planExistsInDB is false — AI generation required

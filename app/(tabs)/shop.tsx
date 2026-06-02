@@ -240,16 +240,17 @@ export default function ShopScreen() {
   const toBuyItems    = useMemo(() => allItems.filter(i => !pantry.has(i.name)), [allItems, pantry]);
   const pantryCount   = allItems.length - toBuyItems.length;
 
-  // Estimated total for the week (only items not already in pantry)
+  // Estimated Lidl basket: only explicitly planned Lidl products (isLidl: true),
+  // not generic ingredients that happen to fuzzy-match the catalog.
   const estimatedCost = useMemo(() => toBuyItems.reduce((s, i) => {
-    if (!i.price) return s;
+    if (!i.isLidl || !i.price) return s;
     const v = parseFloat(i.price);
     return isNaN(v) ? s : s + v;
   }, 0), [toBuyItems]);
 
-  // Running bill: sum of prices for items checked this session (being purchased now)
+  // Running bill: only Lidl items being ticked (same scope as estimatedCost)
   const checkedTotal  = useMemo(() => allItems.reduce((s, i) => {
-    if (!checked.has(i.id) || !i.price || pantry.has(i.name)) return s;
+    if (!i.isLidl || !checked.has(i.id) || !i.price || pantry.has(i.name)) return s;
     const v = parseFloat(i.price);
     return isNaN(v) ? s : s + v;
   }, 0), [allItems, checked, pantry]);

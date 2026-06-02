@@ -350,6 +350,18 @@ export async function handler(req: any, res: any) {
   }
 }
 
+export async function clearWeekHandler(req: any, res: any) {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+    const weekKey = getWeekKey();
+    await supabasePublic.from('weekly_plans').delete().eq('week_key', weekKey).eq('user_id', userId);
+    return res.status(200).json({ cleared: true, weekKey });
+  } catch (error) {
+    return res.status(500).json({ error: (error as Error).message });
+  }
+}
+
 export async function getWeekHandler(req: any, res: any) {
   try {
     const { key } = req.params;
