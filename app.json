@@ -10,17 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "13",
+      "buildNumber": "14",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",
         "NSPhotoLibraryUsageDescription": "Used to import food photos.",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSHealthShareUsageDescription": "Used to read your body metrics for personalized nutrition plans."
-      },
-      "entitlements": {
-        "com.apple.developer.healthkit": true,
-        "com.apple.developer.healthkit.access": []
       }
     },
     "android": {
