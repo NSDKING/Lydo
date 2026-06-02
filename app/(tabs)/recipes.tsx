@@ -19,9 +19,12 @@ import {
   ActivityIndicator,
   AppState,
   AppStateStatus,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -48,7 +51,7 @@ function defaultImportState(): ImportState {
 export default function RecipesScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
 
   // ── My Recipes (Supabase) ──────────────────────────────────────────────────
@@ -128,6 +131,46 @@ export default function RecipesScreen() {
   const planDays = plan?.days.map(d => d.day) ?? [];
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
   const mealAccentColors = [colors.orange, colors.lime, colors.blue, '#c47fff'];
+
+  // ── Create Recipe ─────────────────────────────────────────────────────────
+  const [creating, setCreating] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createCal, setCreateCal] = useState('');
+  const [createProtein, setCreateProtein] = useState('');
+  const [createCarbs, setCreateCarbs] = useState('');
+  const [createFat, setCreateFat] = useState('');
+  const [createIngredients, setCreateIngredients] = useState('');
+  const [createSteps, setCreateSteps] = useState('');
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const handleCreateRecipe = async () => {
+    if (!createName.trim() || !parseInt(createCal)) {
+      setCreateError(lang === 'fr' ? 'Nom et calories requis.' : 'Name and calories required.');
+      return;
+    }
+    setCreateSaving(true);
+    setCreateError(null);
+    try {
+      await saveUserRecipe({
+        name: createName.trim(),
+        calories: parseInt(createCal) || 0,
+        protein_g: parseFloat(createProtein) || 0,
+        carbs_g: parseFloat(createCarbs) || 0,
+        fat_g: parseFloat(createFat) || 0,
+        ingredients: createIngredients.split('\n').map(s => s.trim()).filter(Boolean),
+        lidl_products_used: [],
+      });
+      setCreateName(''); setCreateCal(''); setCreateProtein('');
+      setCreateCarbs(''); setCreateFat(''); setCreateIngredients(''); setCreateSteps('');
+      setCreating(false);
+      loadMyRecipes();
+    } catch (e) {
+      setCreateError((e as Error).message);
+    } finally {
+      setCreateSaving(false);
+    }
+  };
 
   // ── Plan meal save state ───────────────────────────────────────────────────
   const [planMealSaving, setPlanMealSaving] = useState<Record<number, boolean>>({});
@@ -262,7 +305,59 @@ export default function RecipesScreen() {
           <View style={styles.sectionRow}>
             <Text style={[styles.sectionLabel, { color: colors.text3 }]}>{t('recipesMyTitle')}</Text>
             {loadingMyRecipes && <ActivityIndicator color={colors.lime} size="small" />}
+            <TouchableOpacity
+              style={[styles.createBtn, { backgroundColor: colors.limeDim, borderColor: colors.lime }]}
+              onPress={() => setCreating(c => !c)}
+            >
+              <Text style={[styles.createBtnText, { color: colors.lime }]}>{creating ? '✕' : '+'}</Text>
+            </TouchableOpacity>
           </View>
+
+          {creating && (
+            <View style={[styles.createForm, { backgroundColor: colors.surface, borderColor: colors.lime }]}>
+              <Text style={[styles.createFormTitle, { color: colors.text }]}>
+                {lang === 'fr' ? 'Nouvelle recette' : 'New Recipe'}
+              </Text>
+              {[
+                { label: lang === 'fr' ? 'Nom *' : 'Name *', value: createName, set: setCreateName, kb: 'default' as const },
+                { label: 'Calories *', value: createCal, set: setCreateCal, kb: 'numeric' as const },
+                { label: `${t('protein')} (g)`, value: createProtein, set: setCreateProtein, kb: 'decimal-pad' as const },
+                { label: `${t('carbs')} (g)`, value: createCarbs, set: setCreateCarbs, kb: 'decimal-pad' as const },
+                { label: `${t('fat')} (g)`, value: createFat, set: setCreateFat, kb: 'decimal-pad' as const },
+              ].map(f => (
+                <View key={f.label} style={styles.createField}>
+                  <Text style={[styles.createFieldLabel, { color: colors.text3 }]}>{f.label}</Text>
+                  <TextInput
+                    style={[styles.createFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+                    value={f.value} onChangeText={f.set} keyboardType={f.kb}
+                    placeholderTextColor={colors.text3} placeholder="0"
+                  />
+                </View>
+              ))}
+              <View style={styles.createField}>
+                <Text style={[styles.createFieldLabel, { color: colors.text3 }]}>
+                  {lang === 'fr' ? 'Ingrédients (un par ligne)' : 'Ingredients (one per line)'}
+                </Text>
+                <TextInput
+                  style={[styles.createFieldInput, styles.createTextArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+                  value={createIngredients} onChangeText={setCreateIngredients}
+                  multiline numberOfLines={4} textAlignVertical="top"
+                  placeholderTextColor={colors.text3}
+                  placeholder={lang === 'fr' ? '200g de poulet\n1 oignon\n...' : '200g chicken\n1 onion\n...'}
+                />
+              </View>
+              {createError && <Text style={[styles.createError, { color: colors.orange }]}>{createError}</Text>}
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: colors.lime, opacity: createSaving ? 0.7 : 1 }]}
+                onPress={handleCreateRecipe} disabled={createSaving}
+              >
+                {createSaving
+                  ? <ActivityIndicator color={colors.background} size="small" />
+                  : <Text style={[styles.saveBtnText, { color: colors.background }]}>{t('save')}</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
 
           {!loadingMyRecipes && myRecipes.length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -677,7 +772,16 @@ const styles = StyleSheet.create({
   importError: { fontSize: 12, marginTop: 8 },
   section: { paddingHorizontal: 24, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase' },
+  sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', flex: 1 },
+  createBtn: { borderWidth: 1, borderRadius: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  createBtnText: { fontSize: 18, lineHeight: 22, fontWeight: '700' },
+  createForm: { borderWidth: 1.5, borderRadius: 18, padding: 16, marginBottom: 14 },
+  createFormTitle: { fontSize: 16, fontWeight: '700', marginBottom: 14 },
+  createField: { marginBottom: 12 },
+  createFieldLabel: { fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 },
+  createFieldInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+  createTextArea: { height: 90, textAlignVertical: 'top', paddingTop: 10 },
+  createError: { fontSize: 12, marginBottom: 10 },
   emptyCard: { borderWidth: 1, borderRadius: 14, padding: 16 },
   emptyText: { fontSize: 13, lineHeight: 18 },
   recipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 10 },

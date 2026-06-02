@@ -1,9 +1,9 @@
 import { Colors } from '@/constants/theme';
 import { useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { scanFoodWithAI } from '@/services/api';
+import { scanFoodWithAI, fetchUserRecipes, UserRecipe } from '@/services/api';
 import { CameraView, BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,7 +17,7 @@ import {
   View,
 } from 'react-native';
 
-type SheetMode = 'select' | 'barcode' | 'ai' | 'manual' | 'confirm';
+type SheetMode = 'select' | 'barcode' | 'ai' | 'manual' | 'my-recipes' | 'confirm';
 
 interface Per100g { calories: number; protein_g: number; carbs_g: number; fat_g: number }
 
@@ -72,10 +72,16 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
   const [mCarbs, setMCarbs] = useState('');
   const [mFat, setMFat] = useState('');
 
+  // my recipes
+  const [myRecipes, setMyRecipes] = useState<UserRecipe[]>([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
+  const [recipeSearch, setRecipeSearch] = useState('');
+
   const reset = useCallback(() => {
     setMode('select'); setLoading(false); setError(null); setResult(null);
     setScanned(false); setPer100g(null); setProductName(''); setPortionG('100');
     setMName(''); setMCal(''); setMProtein(''); setMCarbs(''); setMFat('');
+    setRecipeSearch('');
   }, []);
 
   const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
@@ -88,6 +94,12 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     if (!permission?.granted) await requestPermission();
     setMode(next);
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    if (mode !== 'my-recipes') return;
+    setRecipesLoading(true);
+    fetchUserRecipes().then(setMyRecipes).finally(() => setRecipesLoading(false));
+  }, [mode]);
 
   // ── Barcode ────────────────────────────────────────────────────────────────
 
@@ -198,6 +210,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
       {[
         { icon: '📷', title: 'Scan Barcode', desc: 'Point camera at product barcode', next: 'barcode' as SheetMode, accent: true },
         { icon: '🤖', title: 'AI Food Scan', desc: 'Take a photo — AI estimates macros', next: 'ai' as SheetMode, accent: false },
+        { icon: '📖', title: 'My Recipes', desc: 'Pick from your saved recipes', next: 'my-recipes' as SheetMode, accent: false },
         { icon: '✏️', title: 'Enter Manually', desc: 'Type in the nutritional values', next: 'manual' as SheetMode, accent: false },
       ].map(opt => (
         <TouchableOpacity
@@ -346,6 +359,49 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     </KeyboardAvoidingView>
   );
 
+  const renderMyRecipes = () => {
+    const filtered = myRecipes.filter(r =>
+      !recipeSearch || r.name.toLowerCase().includes(recipeSearch.toLowerCase())
+    );
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.padded} keyboardShouldPersistTaps="handled">
+          <Text style={[styles.title, { color: colors.text }]}>My Recipes</Text>
+          <TextInput
+            style={[styles.fieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface3, marginBottom: 16 }]}
+            placeholder="Search recipes…"
+            placeholderTextColor={colors.text3}
+            value={recipeSearch}
+            onChangeText={setRecipeSearch}
+            clearButtonMode="while-editing"
+          />
+          {recipesLoading && <ActivityIndicator color={colors.lime} style={{ marginTop: 24 }} />}
+          {!recipesLoading && filtered.length === 0 && (
+            <Text style={[styles.subtitle, { color: colors.text3, textAlign: 'center', marginTop: 24 }]}>
+              {myRecipes.length === 0 ? 'No saved recipes yet.' : 'No match.'}
+            </Text>
+          )}
+          {filtered.map(r => (
+            <TouchableOpacity
+              key={r.id}
+              style={[styles.optionCard, { backgroundColor: colors.surface3, borderColor: colors.border, flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}
+              onPress={() => {
+                setResult({ name: r.name, calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g, source: 'manual' });
+                setMode('confirm');
+              }}
+            >
+              <Text style={[styles.optionTitle, { color: colors.text }]}>{r.name}</Text>
+              <Text style={[styles.optionDesc, { color: colors.text3 }]}>
+                {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · F {r.fat_g}g
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  };
+
   const renderConfirm = () => {
     if (!result) return null;
     const sourceLabel = result.source === 'barcode' ? '📷 From barcode' : result.source === 'ai' ? '🤖 AI estimated' : '✏️ Manually entered';
@@ -365,7 +421,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     );
   };
 
-  const noPadding = mode === 'barcode' || mode === 'ai';
+  const noPadding = mode === 'barcode' || mode === 'ai' || mode === 'my-recipes';
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -387,6 +443,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
             {mode === 'barcode' && renderBarcode()}
             {mode === 'ai' && renderAI()}
             {mode === 'manual' && renderManual()}
+            {mode === 'my-recipes' && renderMyRecipes()}
             {mode === 'confirm' && renderConfirm()}
           </View>
         </View>

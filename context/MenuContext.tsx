@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   DayPlan,
   Meal,
@@ -93,8 +93,18 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [swappingMeal, setSwappingMeal] = useState<{ day: DayKey; idx: number } | null>(null);
   const [extraMeals, setExtraMeals] = useState<Record<DayKey, ExtraMeal[]>>({});
 
-  // Load: check Supabase cache first, run AI only if planExistsInDB is false
+  // Keep a ref to the latest profile so `load` doesn't need it in its deps
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+
+  // Guard: only run load once per session unless forceRegenerate
+  const didInitialLoad = useRef(false);
+
   const load = useCallback(async (forceRegenerate = false) => {
+    // Skip if already loaded this session (profile changes must not re-trigger AI)
+    if (didInitialLoad.current && !forceRegenerate) return;
+    didInitialLoad.current = true;
+
     setIsLoading(true);
     setError(null);
     try {
@@ -105,30 +115,29 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       if (!forceRegenerate) {
         const cached = await fetchWeeklyPlan(weekKey);
         if (cached) {
-          setPlanExistsInDB(true);   // plan found in DB — skip AI
+          setPlanExistsInDB(true);
           setPlan(cached);
+          prefetchNextWeek(userId).catch(() => {});
           return;
         }
       } else if (userId) {
-        // Clear the cached plan so the server guard doesn't block regeneration
         await clearWeeklyPlan(userId).catch(() => {});
       }
 
-      // planExistsInDB is false — AI generation required
       setPlanExistsInDB(false);
 
-      // Load pantry so model can reuse what the user already has
       const rawPantry = await AsyncStorage.getItem('lydo_pantry').catch(() => null);
       const pantryItems: string[] = rawPantry ? JSON.parse(rawPantry) : [];
+      const p = profileRef.current;
 
       const fresh = await generateMenuPlan({
         days: 7,
         mealsPerDay: 3,
-        targetCalories: profile.daily_calories,
-        preferences: profile.preferences || undefined,
-        dietaryRestrictions: profile.dietary_restrictions || undefined,
+        targetCalories: p.daily_calories,
+        preferences: p.preferences || undefined,
+        dietaryRestrictions: p.dietary_restrictions || undefined,
         userId,
-        weeklyBudget: profile.weekly_budget_eur,
+        weeklyBudget: p.weekly_budget_eur,
         pantryItems,
       });
       setPlan(fresh);
@@ -136,18 +145,55 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       setLoggedMeals({});
       setLockedMeals({});
       setMealOverrides({});
-      // Fire-and-forget: save all generated meals to user_recipes
       fresh.days.forEach(day =>
         day.meals.forEach(meal =>
           saveUserRecipe(meal, userId).catch(() => {})
         )
       );
+      prefetchNextWeek(userId).catch(() => {});
     } catch (err) {
-      setError((err as Error).message);
+      didInitialLoad.current = false; // allow retry on next mount if load failed
+      const raw = (err as Error).message ?? '';
+      if (raw.includes('credit') || raw.includes('billing') || raw.includes('balance')) {
+        setError('__credits__');
+      } else if (raw.startsWith('{') || raw.startsWith('4') || raw.startsWith('5')) {
+        setError('__server__');
+      } else {
+        setError(raw);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [profile.daily_calories, profile.preferences, profile.dietary_restrictions]);
+  }, []); // stable — profile read via ref
+
+  // Pre-generate next week's plan silently if it doesn't exist yet and it's Wed or later
+  async function prefetchNextWeek(userId?: string) {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun, 3=Wed, 6=Sat
+    if (dayOfWeek < 3) return; // only from Wednesday onwards
+
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + (8 - (today.getDay() || 7)));
+    const nextWeekKey = getWeekKey(nextMonday);
+
+    const existing = await fetchWeeklyPlan(nextWeekKey);
+    if (existing) return; // already generated
+
+    const rawPantry = await AsyncStorage.getItem('lydo_pantry').catch(() => null);
+    const pantryItems: string[] = rawPantry ? JSON.parse(rawPantry) : [];
+    const p = profileRef.current;
+
+    await generateMenuPlan({
+      days: 7, mealsPerDay: 3,
+      targetCalories: p.daily_calories,
+      preferences: p.preferences || undefined,
+      dietaryRestrictions: p.dietary_restrictions || undefined,
+      userId,
+      weeklyBudget: p.weekly_budget_eur,
+      pantryItems,
+    });
+    console.log(`Next week plan pre-generated: ${nextWeekKey}`);
+  }
 
   useEffect(() => { load(); }, [load]);
 

@@ -130,8 +130,8 @@ export async function clearWeeklyPlan(userId: string): Promise<void> {
   await post('/menu/clear', { userId }, 10_000);
 }
 
-export async function fetchMealSteps(mealName: string, ingredients: string[]): Promise<string[]> {
-  const data = await post<{ steps: string[] }>('/meal/steps', { mealName, ingredients }, 30_000);
+export async function fetchMealSteps(mealName: string, ingredients: string[], lang = 'en'): Promise<string[]> {
+  const data = await post<{ steps: string[] }>('/meal/steps', { mealName, ingredients, lang }, 30_000);
   return data.steps;
 }
 

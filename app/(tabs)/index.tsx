@@ -35,7 +35,7 @@ export default function TodayScreen() {
     setSelectedMeal(meal);
     if (!stepsCache[meal.name] && stepsLoadingName !== meal.name) {
       setStepsLoadingName(meal.name);
-      fetchMealSteps(meal.name, meal.ingredients).then(steps => {
+      fetchMealSteps(meal.name, meal.ingredients, lang).then(steps => {
         setStepsCache(c => ({ ...c, [meal.name]: steps }));
       }).finally(() => setStepsLoadingName(null));
     }
@@ -127,7 +127,20 @@ export default function TodayScreen() {
         <View style={styles.planSection}>
           <Text style={[styles.planTitle, { color: colors.text3 }]}>{t('todayTitle')}</Text>
 
-          {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
+          {error && !todayPlan && (
+            <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={{ fontSize: 28 }}>
+                {error === '__credits__' ? '💳' : '⚠️'}
+              </Text>
+              <Text style={[styles.loadingText, { color: colors.orange }]}>
+                {error === '__credits__'
+                  ? (lang === 'fr' ? 'Génération temporairement indisponible.' : 'Generation temporarily unavailable.')
+                  : error === '__server__'
+                  ? (lang === 'fr' ? 'Erreur serveur. Réessayez.' : 'Server error. Please retry.')
+                  : error}
+              </Text>
+            </View>
+          )}
 
           {isLoading && (
             <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

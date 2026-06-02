@@ -334,7 +334,7 @@ export default function PlanScreen() {
                   setEditingIdx(null);
                   if (next !== null && !stepsCache[meal.name] && stepsLoadingName !== meal.name) {
                     setStepsLoadingName(meal.name);
-                    fetchMealSteps(meal.name, meal.ingredients).then(steps => {
+                    fetchMealSteps(meal.name, meal.ingredients, lang).then(steps => {
                       setStepsCache(c => ({ ...c, [meal.name]: steps }));
                     }).finally(() => setStepsLoadingName(null));
                   }
@@ -498,6 +498,7 @@ interface SwapModalProps {
 function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecipe, onCheapen, onApplyCheapen, onConfirm, onPatch, onClose }: SwapModalProps) {
   const { t } = useLang();
   const set = (p: Partial<SwapState>) => onPatch(p);
+  const [recipeSearch, setRecipeSearch] = React.useState('');
 
   return (
     <>
@@ -558,6 +559,16 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
         {/* ── my recipes ── */}
         {state.phase === 'my-recipes' && (
           <View>
+            {!state.loadingRecipes && state.userRecipes.length > 0 && (
+              <TextInput
+                style={[styles.recipeSearch, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+                placeholder={t('planMyRecipes') + '…'}
+                placeholderTextColor={colors.text3}
+                value={recipeSearch}
+                onChangeText={setRecipeSearch}
+                clearButtonMode="while-editing"
+              />
+            )}
             {state.loadingRecipes && (
               <View style={styles.loadingPhase}>
                 <ActivityIndicator color={colors.lime} size="large" />
@@ -571,7 +582,9 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
                 <Text style={[styles.emptyDesc, { color: colors.text3 }]}>{t('planNoRecipesDesc')}</Text>
               </View>
             )}
-            {!state.loadingRecipes && state.userRecipes.map(r => (
+            {!state.loadingRecipes && state.userRecipes
+              .filter(r => !recipeSearch || r.name.toLowerCase().includes(recipeSearch.toLowerCase()))
+              .map(r => (
               <TouchableOpacity
                 key={r.id}
                 style={[styles.savedRecipeRow, { backgroundColor: colors.surface2, borderColor: colors.border }]}
@@ -590,7 +603,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
               </TouchableOpacity>
             ))}
             {state.error && <Text style={[styles.errorMsg, { color: colors.orange }]}>{state.error}</Text>}
-            <TouchableOpacity style={[styles.backBtn, { marginTop: 12 }]} onPress={() => set({ phase: 'choose', error: null })}>
+            <TouchableOpacity style={[styles.backBtn, { marginTop: 12 }]} onPress={() => { set({ phase: 'choose', error: null }); setRecipeSearch(''); }}>
               <Text style={[styles.backBtnText, { color: colors.text3 }]}>{t('back')}</Text>
             </TouchableOpacity>
           </View>
@@ -805,6 +818,7 @@ const styles = StyleSheet.create({
   backBtn: { alignItems: 'center', paddingVertical: 8 },
   backBtnText: { fontSize: 14 },
   // my recipes
+  recipeSearch: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, marginBottom: 12 },
   savedRecipeRow: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
   savedRecipeName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   savedRecipeMeta: { fontSize: 12 },
