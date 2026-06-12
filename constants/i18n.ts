@@ -15,6 +15,7 @@ export const T = {
     protein: 'Protein',
     carbs: 'Carbs',
     fat: 'Fat',
+    fiber: 'Fiber',
     breakfast: 'Breakfast',
     lunch: 'Lunch',
     dinner: 'Dinner',
@@ -174,6 +175,14 @@ export const T = {
     shopOrder: '🛒  Order Online',
     shopItems: 'items',
 
+    // ── Rating modal ─────────────────────────────────────────────────────────
+    rateTitle: 'Rate this meal',
+    rateHint: 'How was it?',
+    rateDone: 'Done',
+    rateSkip: 'Skip',
+    mealNotes: 'Notes (optional)',
+    mealNotesPlaceholder: 'Describe how you enjoyed this meal…',
+
     // ── Profile tab ───────────────────────────────────────────────────────────
     profileTitle: 'Profile',
     profileSave: 'Save',
@@ -213,6 +222,8 @@ export const T = {
     profileBmi: 'BMI',
     profileTdee: 'TDEE',
     profileTarget: 'Target',
+    profileAppliances: 'Kitchen Appliances',
+    profileAppliancesHint: 'Tap + to mark appliances you own',
   },
 
   fr: {
@@ -229,6 +240,7 @@ export const T = {
     protein: 'Protéines',
     carbs: 'Glucides',
     fat: 'Lipides',
+    fiber: 'Fibres',
     breakfast: 'Petit-déjeuner',
     lunch: 'Déjeuner',
     dinner: 'Dîner',
@@ -388,6 +400,14 @@ export const T = {
     shopOrder: '🛒  Commander en ligne',
     shopItems: 'articles',
 
+    // ── Rating modal ─────────────────────────────────────────────────────────
+    rateTitle: 'Notez ce repas',
+    rateHint: 'Comment était-il ?',
+    rateDone: 'Valider',
+    rateSkip: 'Passer',
+    mealNotes: 'Notes (optionnel)',
+    mealNotesPlaceholder: 'Décrivez ce que vous avez pensé de ce repas…',
+
     // ── Profile tab ───────────────────────────────────────────────────────────
     profileTitle: 'Profil',
     profileSave: 'Enregistrer',
@@ -427,6 +447,8 @@ export const T = {
     profileBmi: 'IMC',
     profileTdee: 'TDEE',
     profileTarget: 'Objectif',
+    profileAppliances: 'Appareils de cuisine',
+    profileAppliancesHint: 'Appuyez sur + pour indiquer vos appareils',
   },
 } as const;
 

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
 import { DEFAULT_PROFILE, useProfile, UserProfile } from '@/context/ProfileContext';
@@ -17,6 +18,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+// ─── Kitchen Appliances ───────────────────────────────────────────────────────
+
+const APPLIANCES_EN = [
+  'Oven', 'Microwave', 'Air Fryer', 'Slow Cooker', 'Blender',
+  'Food Processor', 'Instant Pot', 'Grill / BBQ', 'Steamer', 'Wok',
+];
+const APPLIANCES_FR = [
+  'Four', 'Micro-ondes', 'Friteuse à air', 'Mijoteuse', 'Mixeur',
+  'Robot culinaire', 'Autocuiseur', 'Grill / Barbecue', 'Cuiseur vapeur', 'Wok',
+];
+const APPLIANCES_KEY = 'lydo_kitchen_appliances';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -102,13 +115,28 @@ function PillSelector<T extends string>({
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { t, langPref, setLang } = useLang();
+  const { t, lang, langPref, setLang } = useLang();
   const { profile, saving, saveProfile } = useProfile();
 
   const [draft, setDraft] = useState<UserProfile>(profile);
   const [saved, setSaved] = useState(false);
+  const [applianceCounts, setApplianceCounts] = useState<Record<string, number>>({});
 
   useEffect(() => { setDraft(profile); }, [profile]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(APPLIANCES_KEY).then(raw => {
+      if (raw) try { setApplianceCounts(JSON.parse(raw)); } catch { /* ignore */ }
+    }).catch(() => {});
+  }, []);
+
+  const updateAppliance = (name: string, delta: number) => {
+    setApplianceCounts(prev => {
+      const next = { ...prev, [name]: Math.max(0, (prev[name] ?? 0) + delta) };
+      AsyncStorage.setItem(APPLIANCES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
 
   const set = <K extends keyof UserProfile>(key: K, raw: string | UserProfile[K]) => {
     setDraft(prev => {
@@ -296,6 +324,42 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Kitchen Appliances */}
+          <SectionHeader title={t('profileAppliances')} colors={colors} />
+          <Text style={[styles.sectionHint, { color: colors.text3 }]}>{t('profileAppliancesHint')}</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {(lang === 'fr' ? APPLIANCES_FR : APPLIANCES_EN).map((name, i) => {
+              const enName = APPLIANCES_EN[i];
+              const count = applianceCounts[enName] ?? 0;
+              return (
+                <View
+                  key={enName}
+                  style={[styles.applianceRow, { borderBottomColor: colors.border, borderBottomWidth: i < APPLIANCES_EN.length - 1 ? StyleSheet.hairlineWidth : 0 }]}
+                >
+                  <Text style={[styles.applianceName, { color: count > 0 ? colors.text : colors.text3 }]}>{name}</Text>
+                  <View style={styles.stepperRow}>
+                    <TouchableOpacity
+                      style={[styles.stepperBtn, { backgroundColor: count > 0 ? colors.surface3 : colors.surface2, borderColor: colors.border }]}
+                      onPress={() => updateAppliance(enName, -1)}
+                      disabled={count === 0}
+                    >
+                      <Text style={[styles.stepperBtnText, { color: count > 0 ? colors.text : colors.text3 }]}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.stepperCount, { color: count > 0 ? colors.lime : colors.text3 }]}>
+                      {count}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.stepperBtn, { backgroundColor: colors.surface3, borderColor: colors.border }]}
+                      onPress={() => updateAppliance(enName, 1)}
+                    >
+                      <Text style={[styles.stepperBtnText, { color: colors.lime }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
           {/* Language */}
           <SectionHeader title={t('profileLanguage')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -372,4 +436,11 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: '600' },
   accountBtn: { paddingVertical: 16, paddingHorizontal: 18 },
   accountBtnText: { fontSize: 15, fontWeight: '600' },
+  sectionHint: { fontSize: 11, marginHorizontal: 24, marginTop: -4, marginBottom: 8 },
+  applianceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4 },
+  applianceName: { flex: 1, fontSize: 15 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stepperBtn: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  stepperBtnText: { fontSize: 18, fontWeight: '600', lineHeight: 22 },
+  stepperCount: { width: 24, textAlign: 'center', fontSize: 16, fontWeight: '700' },
 });

@@ -7,6 +7,7 @@ export interface Meal {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
   ingredients: string[];
   steps?: string[];
   lidl_products_used: string[];
@@ -18,6 +19,7 @@ export interface DayPlan {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
   meals: Meal[];
 }
 
@@ -112,6 +114,8 @@ export async function generateMenuPlan(params?: {
   userId?: string;
   weeklyBudget?: number;
   pantryItems?: string[];
+  kitchenAppliances?: string[];
+  mealRatingsSummary?: string;
 }): Promise<MenuPlan> {
   const data = await post<{ plan: MenuPlan }>('/menu/generate', {
     days: params?.days ?? 7,
@@ -122,6 +126,8 @@ export async function generateMenuPlan(params?: {
     userId: params?.userId,
     weeklyBudget: params?.weeklyBudget,
     pantryItems: params?.pantryItems ?? [],
+    kitchenAppliances: params?.kitchenAppliances ?? [],
+    mealRatingsSummary: params?.mealRatingsSummary ?? '',
   });
   return data.plan;
 }
@@ -142,8 +148,49 @@ export async function swapMeal(dayPlan: DayPlan, mealIndex: number, preferences?
 
 // ─── TikTok ───────────────────────────────────────────────────────────────────
 
+// Fetch TikTok page metadata on the device (not the backend) to avoid cloud IP blocks.
+async function fetchTiktokMeta(url: string): Promise<{ title: string; description: string }> {
+  const MOBILE_UA =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
+    'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
+  // 1. Try oEmbed first — officially supported, most reliable
+  try {
+    const oembedRes = await fetch(
+      `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+      { headers: { 'User-Agent': MOBILE_UA } },
+    );
+    if (oembedRes.ok) {
+      const j = await oembedRes.json() as { title?: string };
+      if (j.title && j.title.length > 10) {
+        return { title: j.title, description: j.title };
+      }
+    }
+  } catch { /* fall through */ }
+
+  // 2. Fall back to raw HTML og: tags
+  const htmlRes = await fetch(url, {
+    headers: { 'User-Agent': MOBILE_UA, 'Accept': 'text/html' },
+  });
+  if (!htmlRes.ok) throw new Error(`Could not fetch TikTok page (HTTP ${htmlRes.status})`);
+  const html = await htmlRes.text();
+
+  const ogTag = (prop: string): string => {
+    const m =
+      html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i')) ??
+      html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
+    return m ? m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim() : '';
+  };
+
+  const title = ogTag('og:title') || ogTag('twitter:title') || 'TikTok Recipe';
+  const description = ogTag('og:description') || ogTag('twitter:description') || title;
+  return { title, description };
+}
+
 export async function analyzeTiktok(url: string): Promise<TiktokRecipe> {
-  const data = await post<{ recipe: TiktokRecipe }>('/tiktok/analyze', { tiktokUrl: url }, 120_000);
+  // Fetch metadata on device (bypasses Railway IP block), then send text to backend for Claude extraction
+  const { title, description } = await fetchTiktokMeta(url);
+  const data = await post<{ recipe: TiktokRecipe }>('/tiktok/analyze', { title, description }, 60_000);
   return data.recipe;
 }
 
@@ -193,6 +240,7 @@ export interface UserRecipe {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number | null;
   weight_g?: number | null;
   ingredients: string[];
   lidl_products_used: string[];

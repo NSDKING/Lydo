@@ -8,28 +8,123 @@ import { AdaptedIngredient, adaptRecipeWithLidl, fetchMealSteps, Meal, saveUserR
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const MACRO_MAX = { protein: 160, carbs: 250, fat: 80 };
+const MACRO_MAX = { protein: 160, carbs: 250, fat: 80, fiber: 40 };
+const FIBER_COLOR = '#b380ff';
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
+// ─── Rating Modal ─────────────────────────────────────────────────────────────
+
+interface RatingModalProps {
+  visible: boolean;
+  mealName: string;
+  colors: any;
+  onSubmit: (rating: number, description: string) => void;
+  onDismiss: () => void;
+  t: (k: string) => string;
+}
+
+function RatingModal({ visible, mealName, colors, onSubmit, onDismiss, t }: RatingModalProps) {
+  const [rating, setRating] = useState(0);
+  const [description, setDescription] = useState('');
+
+  const handleSubmit = () => {
+    if (rating > 0) onSubmit(rating, description);
+    else onDismiss();
+    setRating(0);
+    setDescription('');
+  };
+
+  const handleDismiss = () => {
+    setRating(0);
+    setDescription('');
+    onDismiss();
+  };
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={handleDismiss}>
+      <View style={ratingStyles.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={[ratingStyles.sheet, { backgroundColor: colors.surface }]}>
+            <Text style={[ratingStyles.title, { color: colors.text }]}>{t('rateTitle')}</Text>
+            <Text style={[ratingStyles.mealName, { color: colors.lime }]}>{mealName}</Text>
+            <Text style={[ratingStyles.hint, { color: colors.text3 }]}>{t('rateHint')}</Text>
+
+            {/* Stars */}
+            <View style={ratingStyles.starsRow}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
+                  <Text style={[ratingStyles.star, { color: star <= rating ? colors.lime : colors.surface3 }]}>
+                    ★
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Description */}
+            <Text style={[ratingStyles.notesLabel, { color: colors.text3 }]}>{t('mealNotes')}</Text>
+            <TextInput
+              style={[ratingStyles.notesInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface3 }]}
+              placeholder={t('mealNotesPlaceholder')}
+              placeholderTextColor={colors.text3}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+
+            {/* Actions */}
+            <View style={ratingStyles.actions}>
+              <TouchableOpacity style={[ratingStyles.skipBtn, { borderColor: colors.border }]} onPress={handleDismiss}>
+                <Text style={[ratingStyles.skipText, { color: colors.text3 }]}>{t('rateSkip')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[ratingStyles.doneBtn, { backgroundColor: rating > 0 ? colors.lime : colors.surface3 }]}
+                onPress={handleSubmit}
+              >
+                <Text style={[ratingStyles.doneText, { color: rating > 0 ? colors.background : colors.text3 }]}>
+                  {t('rateDone')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function TodayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang } = useLang();
-  const { plan, isLoading, error, loggedMeals, logMeal, getEatenCalories, getEatenMacros, extraMeals, removeExtraMeal } = useMenu();
+  const {
+    plan, isLoading, error,
+    loggedMeals, logMeal, getEatenCalories, getEatenMacros,
+    extraMeals, removeExtraMeal,
+    mealRatings, rateMeal, describeMeal,
+  } = useMenu();
 
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [stepsCache, setStepsCache] = useState<Record<string, string[]>>({});
   const [stepsLoadingName, setStepsLoadingName] = useState<string | null>(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
+  const [pendingRating, setPendingRating] = useState<{ idx: number; mealName: string } | null>(null);
 
   const openMeal = (meal: Meal) => {
     setSelectedMeal(meal);
@@ -40,7 +135,6 @@ export default function TodayScreen() {
       }).finally(() => setStepsLoadingName(null));
     }
   };
-  const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   const todayPlan = plan?.days.find(d => d.day === TODAY) ?? plan?.days[0] ?? null;
   const todayLogged = loggedMeals[TODAY] ?? new Set<number>();
@@ -57,7 +151,16 @@ export default function TodayScreen() {
     { label: t('protein'), goalG: todayPlan?.protein_g ?? 0, eatenG: eatenMacros.protein_g, max: MACRO_MAX.protein, color: colors.lime },
     { label: t('carbs'),   goalG: todayPlan?.carbs_g ?? 0,   eatenG: eatenMacros.carbs_g,   max: MACRO_MAX.carbs,   color: colors.blue },
     { label: t('fat'),     goalG: todayPlan?.fat_g ?? 0,      eatenG: eatenMacros.fat_g,      max: MACRO_MAX.fat,     color: colors.orange },
+    { label: t('fiber'),   goalG: todayPlan?.fiber_g ?? 0,    eatenG: eatenMacros.fiber_g,    max: MACRO_MAX.fiber,   color: FIBER_COLOR },
   ];
+
+  const handleLogMeal = (idx: number, meal: Meal) => {
+    const isCurrentlyLogged = todayLogged.has(idx);
+    logMeal(TODAY, idx);
+    if (!isCurrentlyLogged) {
+      setPendingRating({ idx, mealName: meal.name });
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -100,7 +203,8 @@ export default function TodayScreen() {
         {/* Macro bars */}
         <View style={styles.macrosSection}>
           {macros.map((macro) => {
-            const goalPct = Math.min(100, Math.round((macro.goalG / macro.max) * 100));
+            const hasGoal = macro.goalG > 0;
+            const goalPct = hasGoal ? Math.min(100, Math.round((macro.goalG / macro.max) * 100)) : 0;
             const progressPct = Math.min(100, Math.round((macro.eatenG / macro.max) * 100));
             return (
               <View key={macro.label} style={styles.macroRow}>
@@ -113,7 +217,7 @@ export default function TodayScreen() {
                   </Text>
                 </View>
                 <View style={[styles.macroTrack, { backgroundColor: colors.surface3 }]}>
-                  <View style={[styles.macroBar, { width: `${goalPct}%`, backgroundColor: macro.color, opacity: 0.2 }]} />
+                  {hasGoal && <View style={[styles.macroBar, { width: `${goalPct}%`, backgroundColor: macro.color, opacity: 0.2 }]} />}
                   {progressPct > 0 && (
                     <View style={[styles.macroBar, styles.macroBarAbsolute, { width: `${progressPct}%`, backgroundColor: macro.color }]} />
                   )}
@@ -152,6 +256,7 @@ export default function TodayScreen() {
           {!isLoading && todayPlan?.meals.map((meal, index) => {
             const isLogged = todayLogged.has(index);
             const dotColor = mealColorMap[index % mealColorMap.length];
+            const userRating = mealRatings[TODAY]?.[index];
             return (
               <TouchableOpacity
                 key={index}
@@ -174,13 +279,21 @@ export default function TodayScreen() {
                   <Text style={[styles.mealKcal, { color: colors.text3 }]}>{meal.calories} kcal</Text>
                   <TouchableOpacity
                     style={[styles.mealButton, { backgroundColor: isLogged ? colors.surface3 : colors.lime }]}
-                    onPress={() => logMeal(TODAY, index)}
+                    onPress={() => handleLogMeal(index, meal)}
                   >
                     <Text style={[styles.mealButtonText, { color: isLogged ? colors.text2 : colors.background }]}>
                       {isLogged ? t('todayLogged') : t('todayLog')}
                     </Text>
                   </TouchableOpacity>
                 </View>
+                {/* Show star rating if already rated */}
+                {userRating != null && (
+                  <View style={styles.ratingRow}>
+                    <Text style={[styles.ratingStars, { color: colors.lime }]}>
+                      {'★'.repeat(userRating)}{'☆'.repeat(5 - userRating)}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -222,6 +335,22 @@ export default function TodayScreen() {
       </TouchableOpacity>
 
       <AddFoodModal visible={addFoodOpen} onClose={() => setAddFoodOpen(false)} day={TODAY} />
+
+      {/* Rating modal — appears after logging a meal */}
+      <RatingModal
+        visible={!!pendingRating}
+        mealName={pendingRating?.mealName ?? ''}
+        colors={colors}
+        t={(k) => t(k as any)}
+        onSubmit={(rating, description) => {
+          if (pendingRating) {
+            rateMeal(TODAY, pendingRating.idx, rating);
+            if (description.trim()) describeMeal(TODAY, pendingRating.idx, description.trim());
+          }
+          setPendingRating(null);
+        }}
+        onDismiss={() => setPendingRating(null)}
+      />
 
       {/* Recipe detail modal */}
       <Modal
@@ -280,6 +409,7 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
     { label: t('protein'), value: `${meal.protein_g}g`, color: colors.lime },
     { label: t('carbs'),   value: `${meal.carbs_g}g`,   color: colors.blue },
     { label: t('fat'),     value: `${meal.fat_g}g`,      color: colors.orange },
+    ...(meal.fiber_g != null ? [{ label: t('fiber'), value: `${meal.fiber_g}g`, color: '#b380ff' }] : []),
     { label: t('kcal'),    value: `${meal.calories}`,    color: colors.text },
   ];
 
@@ -414,6 +544,8 @@ function RecipeSheet({ meal, colors, onClose, steps, stepsLoading }: { meal: Mea
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
@@ -447,6 +579,8 @@ const styles = StyleSheet.create({
   mealKcal: { fontSize: 12 },
   mealButton: { borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14 },
   mealButtonText: { fontSize: 12, fontWeight: '700' },
+  ratingRow: { marginTop: 8, paddingLeft: 22 },
+  ratingStars: { fontSize: 14, letterSpacing: 2 },
   // modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '85%', paddingHorizontal: 24, paddingTop: 12 },
@@ -457,8 +591,8 @@ const styles = StyleSheet.create({
   closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { fontSize: 14, fontWeight: '700' },
   sheetScroll: { flex: 1 },
-  macroStrip: { flexDirection: 'row', borderWidth: 1, borderRadius: 16, marginBottom: 24, overflow: 'hidden' },
-  macroStripItem: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  macroStrip: { flexDirection: 'row', borderWidth: 1, borderRadius: 16, marginBottom: 24, overflow: 'hidden', flexWrap: 'wrap' },
+  macroStripItem: { flex: 1, minWidth: '20%', alignItems: 'center', paddingVertical: 14 },
   macroStripVal: { fontSize: 16, fontWeight: '700' },
   macroStripLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.1, marginTop: 2 },
   sheetSection: { marginBottom: 24 },
@@ -484,4 +618,21 @@ const styles = StyleSheet.create({
   stepText: { flex: 1, fontSize: 15, lineHeight: 22 },
   fab: { position: 'absolute', bottom: 32, right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 4 },
   fabText: { fontSize: 30, lineHeight: 34, fontWeight: '300' },
+});
+
+const ratingStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)', padding: 24 },
+  sheet: { width: '100%', borderRadius: 24, padding: 24 },
+  title: { fontSize: 18, fontWeight: '800', marginBottom: 6 },
+  mealName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  hint: { fontSize: 13, marginBottom: 16 },
+  starsRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  star: { fontSize: 36 },
+  notesLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  notesInput: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, minHeight: 72, marginBottom: 20 },
+  actions: { flexDirection: 'row', gap: 12 },
+  skipBtn: { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  skipText: { fontSize: 14, fontWeight: '600' },
+  doneBtn: { flex: 2, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  doneText: { fontSize: 14, fontWeight: '700' },
 });

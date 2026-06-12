@@ -27,20 +27,31 @@ export interface ExtraMeal {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
   source: 'barcode' | 'ai' | 'manual';
 }
+
+// rating: 1–5 stars per logged plan meal
+type MealRatings = Record<DayKey, Record<number, number>>;
+// optional user note per logged plan meal
+type MealDescriptions = Record<DayKey, Record<number, string>>;
 
 interface MenuContextValue {
   plan: MenuPlan | null;
   isLoading: boolean;
   error: string | null;
-  planExistsInDB: boolean;                          // true = loaded from cache, false = AI ran
-  refresh: () => void;                              // force-regenerate
+  planExistsInDB: boolean;
+  refresh: () => void;
   // logging
   loggedMeals: Record<DayKey, Set<number>>;
   logMeal: (day: DayKey, idx: number) => void;
   getEatenCalories: (day: DayKey) => number;
-  getEatenMacros: (day: DayKey) => { protein_g: number; carbs_g: number; fat_g: number };
+  getEatenMacros: (day: DayKey) => { protein_g: number; carbs_g: number; fat_g: number; fiber_g: number };
+  // ratings & descriptions
+  mealRatings: MealRatings;
+  mealDescriptions: MealDescriptions;
+  rateMeal: (day: DayKey, idx: number, rating: number) => void;
+  describeMeal: (day: DayKey, idx: number, description: string) => void;
   // locking
   lockedMeals: Record<DayKey, Set<number>>;
   lockMeal: (day: DayKey, idx: number) => void;
@@ -68,7 +79,8 @@ interface MenuContextValue {
 const MenuContext = createContext<MenuContextValue>({
   plan: null, isLoading: false, error: null, planExistsInDB: false, refresh: () => {},
   loggedMeals: {}, logMeal: () => {}, getEatenCalories: () => 0,
-  getEatenMacros: () => ({ protein_g: 0, carbs_g: 0, fat_g: 0 }),
+  getEatenMacros: () => ({ protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }),
+  mealRatings: {}, mealDescriptions: {}, rateMeal: () => {}, describeMeal: () => {},
   lockedMeals: {}, lockMeal: () => {},
   editMealName: () => {},
   swappingMeal: null, swapMeal: async () => {},
@@ -78,6 +90,71 @@ const MenuContext = createContext<MenuContextValue>({
   persistCurrentPlan: async () => {},
   getEffectiveDayPlan: () => null,
 });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildRatingsSummary(
+  plan: MenuPlan | null,
+  mealRatings: MealRatings,
+  mealOverrides: MealOverrides,
+): string {
+  const items: string[] = [];
+  plan?.days.forEach(d => {
+    d.meals.forEach((meal, idx) => {
+      const rating = mealRatings[d.day]?.[idx];
+      if (rating == null) return;
+      const name = mealOverrides[d.day]?.[idx]?.name ?? meal.name;
+      items.push(`${name}: ${rating}/5`);
+    });
+  });
+  if (items.length === 0) return '';
+  return `User meal ratings from this week (use to guide next week — favour highly-rated meals/ingredients and avoid low-rated ones): ${items.join(', ')}.`;
+}
+
+const RATINGS_KEY = (weekKey: string) => `lydo_meal_ratings_${weekKey}`;
+const DESCRIPTIONS_KEY = (weekKey: string) => `lydo_meal_descriptions_${weekKey}`;
+
+/*
+  Required Supabase migration (run once in SQL editor):
+
+  create table if not exists public.meal_ratings (
+    id uuid primary key default gen_random_uuid(),
+    user_id text not null,
+    week_key text not null,
+    day text not null,
+    meal_index integer not null,
+    meal_name text default '',
+    rating integer check (rating between 1 and 5),
+    description text default '',
+    created_at timestamptz default now(),
+    unique(user_id, week_key, day, meal_index)
+  );
+  alter table public.meal_ratings enable row level security;
+  create policy "manage own ratings" on public.meal_ratings
+    for all using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+*/
+
+async function upsertRatingToSupabase(
+  userId: string,
+  weekKey: string,
+  day: string,
+  mealIndex: number,
+  mealName: string,
+  rating: number | null,
+  description: string,
+) {
+  try {
+    await supabase.from('meal_ratings').upsert(
+      { user_id: userId, week_key: weekKey, day, meal_index: mealIndex, meal_name: mealName, rating, description },
+      { onConflict: 'user_id,week_key,day,meal_index' },
+    );
+  } catch { /* silently fail — local state is still saved */ }
+}
+
+function getMealName(plan: MenuPlan | null, overrides: MealOverrides, day: string, idx: number): string {
+  const baseMeal = plan?.days.find(d => d.day === day)?.meals[idx];
+  return overrides[day]?.[idx]?.name ?? baseMeal?.name ?? '';
+}
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
@@ -92,16 +169,70 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [mealOverrides, setMealOverrides] = useState<MealOverrides>({});
   const [swappingMeal, setSwappingMeal] = useState<{ day: DayKey; idx: number } | null>(null);
   const [extraMeals, setExtraMeals] = useState<Record<DayKey, ExtraMeal[]>>({});
+  const [mealRatings, setMealRatings] = useState<MealRatings>({});
+  const [mealDescriptions, setMealDescriptions] = useState<MealDescriptions>({});
 
-  // Keep a ref to the latest profile so `load` doesn't need it in its deps
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
 
-  // Guard: only run load once per session unless forceRegenerate
+  const planRef = useRef(plan);
+  useEffect(() => { planRef.current = plan; }, [plan]);
+
+  const mealRatingsRef = useRef(mealRatings);
+  useEffect(() => { mealRatingsRef.current = mealRatings; }, [mealRatings]);
+
+  const mealDescriptionsRef = useRef(mealDescriptions);
+  useEffect(() => { mealDescriptionsRef.current = mealDescriptions; }, [mealDescriptions]);
+
+  const mealOverridesRef = useRef(mealOverrides);
+  useEffect(() => { mealOverridesRef.current = mealOverrides; }, [mealOverrides]);
+
   const didInitialLoad = useRef(false);
 
+  // Load ratings/descriptions: Supabase is source of truth, AsyncStorage is fast cache
+  useEffect(() => {
+    const weekKey = getWeekKey();
+
+    // 1. Load from AsyncStorage immediately (fast)
+    AsyncStorage.getItem(RATINGS_KEY(weekKey)).then(raw => {
+      if (raw) try { setMealRatings(JSON.parse(raw)); } catch { /* ignore */ }
+    }).catch(() => {});
+    AsyncStorage.getItem(DESCRIPTIONS_KEY(weekKey)).then(raw => {
+      if (raw) try { setMealDescriptions(JSON.parse(raw)); } catch { /* ignore */ }
+    }).catch(() => {});
+
+    // 2. Fetch from Supabase (may override cache with fresher cross-device data)
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const { data } = await supabase
+          .from('meal_ratings')
+          .select('day, meal_index, rating, description')
+          .eq('user_id', session.user.id)
+          .eq('week_key', weekKey);
+        if (!data || data.length === 0) return;
+        const ratings: MealRatings = {};
+        const descriptions: MealDescriptions = {};
+        for (const row of data) {
+          if (!ratings[row.day]) ratings[row.day] = {};
+          if (!descriptions[row.day]) descriptions[row.day] = {};
+          if (row.rating != null) ratings[row.day][row.meal_index] = row.rating;
+          if (row.description) descriptions[row.day][row.meal_index] = row.description;
+        }
+        if (Object.keys(ratings).length > 0) {
+          setMealRatings(ratings);
+          AsyncStorage.setItem(RATINGS_KEY(weekKey), JSON.stringify(ratings)).catch(() => {});
+        }
+        if (Object.keys(descriptions).length > 0) {
+          setMealDescriptions(descriptions);
+          AsyncStorage.setItem(DESCRIPTIONS_KEY(weekKey), JSON.stringify(descriptions)).catch(() => {});
+        }
+      } catch { /* offline — AsyncStorage data is fine */ }
+    })();
+  }, []);
+
   const load = useCallback(async (forceRegenerate = false) => {
-    // Skip if already loaded this session (profile changes must not re-trigger AI)
     if (didInitialLoad.current && !forceRegenerate) return;
     didInitialLoad.current = true;
 
@@ -128,6 +259,13 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       const rawPantry = await AsyncStorage.getItem('lydo_pantry').catch(() => null);
       const pantryItems: string[] = rawPantry ? JSON.parse(rawPantry) : [];
+
+      const rawAppliances = await AsyncStorage.getItem('lydo_kitchen_appliances').catch(() => null);
+      const applianceCounts: Record<string, number> = rawAppliances ? JSON.parse(rawAppliances) : {};
+      const kitchenAppliances = Object.entries(applianceCounts)
+        .filter(([, count]) => count > 0)
+        .map(([name]) => name);
+
       const p = profileRef.current;
 
       const fresh = await generateMenuPlan({
@@ -139,6 +277,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         userId,
         weeklyBudget: p.weekly_budget_eur,
         pantryItems,
+        kitchenAppliances,
       });
       setPlan(fresh);
       setPlanExistsInDB(true);
@@ -152,7 +291,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       );
       prefetchNextWeek(userId).catch(() => {});
     } catch (err) {
-      didInitialLoad.current = false; // allow retry on next mount if load failed
+      didInitialLoad.current = false;
       const raw = (err as Error).message ?? '';
       if (raw.includes('credit') || raw.includes('billing') || raw.includes('balance')) {
         setError('__credits__');
@@ -164,24 +303,31 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []); // stable — profile read via ref
+  }, []); // stable — reads via refs
 
-  // Pre-generate next week's plan silently if it doesn't exist yet and it's Wed or later
   async function prefetchNextWeek(userId?: string) {
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0=Sun, 3=Wed, 6=Sat
-    if (dayOfWeek < 3) return; // only from Wednesday onwards
+    const dayOfWeek = today.getDay();
+    if (dayOfWeek < 3) return;
 
     const nextMonday = new Date(today);
     nextMonday.setDate(today.getDate() + (8 - (today.getDay() || 7)));
     const nextWeekKey = getWeekKey(nextMonday);
 
     const existing = await fetchWeeklyPlan(nextWeekKey);
-    if (existing) return; // already generated
+    if (existing) return;
 
     const rawPantry = await AsyncStorage.getItem('lydo_pantry').catch(() => null);
     const pantryItems: string[] = rawPantry ? JSON.parse(rawPantry) : [];
+
+    const rawAppliances = await AsyncStorage.getItem('lydo_kitchen_appliances').catch(() => null);
+    const applianceCounts: Record<string, number> = rawAppliances ? JSON.parse(rawAppliances) : {};
+    const kitchenAppliances = Object.entries(applianceCounts)
+      .filter(([, count]) => count > 0)
+      .map(([name]) => name);
+
     const p = profileRef.current;
+    const ratingsSummary = buildRatingsSummary(planRef.current, mealRatingsRef.current, mealOverridesRef.current);
 
     await generateMenuPlan({
       days: 7, mealsPerDay: 3,
@@ -191,6 +337,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       userId,
       weeklyBudget: p.weekly_budget_eur,
       pantryItems,
+      kitchenAppliances,
+      mealRatingsSummary: ratingsSummary,
     });
     console.log(`Next week plan pre-generated: ${nextWeekKey}`);
   }
@@ -226,14 +374,56 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     const planMacros = (dayPlan?.meals ?? []).reduce((acc, meal, i) => {
       if (!logged.has(i)) return acc;
       const m = { ...meal, ...overrides[i] };
-      return { protein_g: acc.protein_g + m.protein_g, carbs_g: acc.carbs_g + m.carbs_g, fat_g: acc.fat_g + m.fat_g };
-    }, { protein_g: 0, carbs_g: 0, fat_g: 0 });
+      return {
+        protein_g: acc.protein_g + m.protein_g,
+        carbs_g: acc.carbs_g + m.carbs_g,
+        fat_g: acc.fat_g + m.fat_g,
+        fiber_g: acc.fiber_g + (m.fiber_g ?? 0),
+      };
+    }, { protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
     return (extraMeals[day] ?? []).reduce((acc, m) => ({
       protein_g: acc.protein_g + m.protein_g,
       carbs_g: acc.carbs_g + m.carbs_g,
       fat_g: acc.fat_g + m.fat_g,
+      fiber_g: acc.fiber_g + (m.fiber_g ?? 0),
     }), planMacros);
   }, [plan, loggedMeals, mealOverrides, extraMeals]);
+
+  // ── Ratings & Descriptions ─────────────────────────────────────────────────
+
+  const rateMeal = useCallback((day: DayKey, idx: number, rating: number) => {
+    const weekKey = getWeekKey();
+    setMealRatings(prev => {
+      const updated = { ...prev, [day]: { ...prev[day], [idx]: rating } };
+      AsyncStorage.setItem(RATINGS_KEY(weekKey), JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+    // Persist to Supabase (include current description so it isn't cleared)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      const mealName = getMealName(planRef.current, mealOverridesRef.current, day, idx);
+      const description = mealDescriptionsRef.current[day]?.[idx] ?? '';
+      upsertRatingToSupabase(session.user.id, weekKey, day, idx, mealName, rating, description);
+    });
+  }, []);
+
+  const describeMeal = useCallback((day: DayKey, idx: number, description: string) => {
+    const weekKey = getWeekKey();
+    setMealDescriptions(prev => {
+      const updated = { ...prev, [day]: { ...prev[day], [idx]: description } };
+      AsyncStorage.setItem(DESCRIPTIONS_KEY(weekKey), JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+    // Persist to Supabase (include current rating so it isn't cleared)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      const mealName = getMealName(planRef.current, mealOverridesRef.current, day, idx);
+      const rating = mealRatingsRef.current[day]?.[idx] ?? null;
+      upsertRatingToSupabase(session.user.id, weekKey, day, idx, mealName, rating, description);
+    });
+  }, []);
+
+  // ── Extra meals ────────────────────────────────────────────────────────────
 
   const addExtraMeal = useCallback((day: DayKey, meal: Omit<ExtraMeal, 'id'>) => {
     const entry: ExtraMeal = { ...meal, id: `${Date.now()}-${Math.random()}` };
@@ -342,13 +532,15 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     const protein_g = meals.reduce((s, m) => s + m.protein_g, 0);
     const carbs_g = meals.reduce((s, m) => s + m.carbs_g, 0);
     const fat_g = meals.reduce((s, m) => s + m.fat_g, 0);
-    return { ...base, meals, total_calories, protein_g, carbs_g, fat_g };
+    const fiber_g = meals.reduce((s, m) => s + (m.fiber_g ?? 0), 0);
+    return { ...base, meals, total_calories, protein_g, carbs_g, fat_g, fiber_g };
   }, [plan, mealOverrides]);
 
   return (
     <MenuContext.Provider value={{
       plan, isLoading, error, planExistsInDB, refresh: () => load(true),
       loggedMeals, logMeal, getEatenCalories, getEatenMacros,
+      mealRatings, mealDescriptions, rateMeal, describeMeal,
       lockedMeals, lockMeal,
       editMealName,
       swappingMeal, swapMeal,

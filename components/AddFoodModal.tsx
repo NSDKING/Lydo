@@ -17,12 +17,19 @@ import {
   View,
 } from 'react-native';
 
-type SheetMode = 'select' | 'barcode' | 'ai' | 'manual' | 'my-recipes' | 'confirm';
+type SheetMode =
+  | 'select'
+  | 'barcode'
+  | 'ai'
+  | 'manual'
+  | 'my-recipes'
+  | 'recipe-portion'
+  | 'confirm';
 
-interface Per100g { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+interface Per100g { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
 
 interface FoodResult {
-  name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number;
+  name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number;
   source: 'barcode' | 'ai' | 'manual'; notes?: string;
 }
 
@@ -40,6 +47,7 @@ async function fetchOpenFoodFacts(barcode: string): Promise<{ name: string; per1
         protein_g: n.proteins_100g ?? 0,
         carbs_g: n.carbohydrates_100g ?? 0,
         fat_g: n.fat_100g ?? 0,
+        fiber_g: n.fiber_100g ?? n['fiber-g_100g'] ?? undefined,
       },
     };
   } catch { return null; }
@@ -76,19 +84,37 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
   const [myRecipes, setMyRecipes] = useState<UserRecipe[]>([]);
   const [recipesLoading, setRecipesLoading] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState('');
-
+  const [selectedRecipe, setSelectedRecipe] = useState<UserRecipe | null>(null);
+  const [recipePortionG, setRecipePortionG] = useState('100');
+  
   const reset = useCallback(() => {
     setMode('select'); setLoading(false); setError(null); setResult(null);
     setScanned(false); setPer100g(null); setProductName(''); setPortionG('100');
     setMName(''); setMCal(''); setMProtein(''); setMCarbs(''); setMFat('');
     setRecipeSearch('');
+    setSelectedRecipe(null);
+    setRecipePortionG('100');
   }, []);
 
   const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
 
   const goBack = useCallback(() => {
-    setMode('select'); setError(null); setScanned(false); setPer100g(null); setResult(null);
-  }, []);
+    if (mode === 'recipe-portion') {
+      setMode('my-recipes');
+      return;
+    }
+
+    if (mode === 'confirm' && selectedRecipe) {
+      setMode('recipe-portion');
+      return;
+    }
+
+    setMode('select');
+    setError(null);
+    setScanned(false);
+    setPer100g(null);
+    setResult(null);
+  }, [mode, selectedRecipe]);
 
   const ensureCameraPermission = useCallback(async (next: SheetMode) => {
     if (!permission?.granted) await requestPermission();
@@ -129,6 +155,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
       protein_g: Math.round((per100g.protein_g * g) / 100 * 10) / 10,
       carbs_g: Math.round((per100g.carbs_g * g) / 100 * 10) / 10,
       fat_g: Math.round((per100g.fat_g * g) / 100 * 10) / 10,
+      fiber_g: per100g.fiber_g != null ? Math.round((per100g.fiber_g * g) / 100 * 10) / 10 : undefined,
     });
     setMode('confirm');
   }, [per100g, portionG, productName]);
@@ -176,21 +203,25 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
-  const MacroStrip = ({ cal, p, c, f }: { cal: number; p: number; c: number; f: number }) => (
-    <View style={[styles.macroStrip, { borderColor: colors.border }]}>
-      {[
-        { label: 'Cal', value: `${cal}`, color: colors.text },
-        { label: 'Protein', value: `${p}g`, color: colors.lime },
-        { label: 'Carbs', value: `${c}g`, color: colors.blue },
-        { label: 'Fat', value: `${f}g`, color: colors.orange },
-      ].map(m => (
-        <View key={m.label} style={styles.macroItem}>
-          <Text style={[styles.macroVal, { color: m.color }]}>{m.value}</Text>
-          <Text style={[styles.macroLabel, { color: colors.text3 }]}>{m.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
+  const MacroStrip = ({ cal, p, c, f, fiber }: { cal: number; p: number; c: number; f: number; fiber?: number }) => {
+    const items = [
+      { label: 'Cal', value: `${cal}`, color: colors.text },
+      { label: 'Protein', value: `${p}g`, color: colors.lime },
+      { label: 'Carbs', value: `${c}g`, color: colors.blue },
+      { label: 'Fat', value: `${f}g`, color: colors.orange },
+      ...(fiber != null ? [{ label: 'Fiber', value: `${fiber}g`, color: '#b380ff' }] : []),
+    ];
+    return (
+      <View style={[styles.macroStrip, { borderColor: colors.border }]}>
+        {items.map(m => (
+          <View key={m.label} style={styles.macroItem}>
+            <Text style={[styles.macroVal, { color: m.color }]}>{m.value}</Text>
+            <Text style={[styles.macroLabel, { color: colors.text3 }]}>{m.label}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   const CameraPermissionPrompt = () => (
     <View style={styles.center}>
@@ -238,6 +269,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
       const p = Math.round(per100g.protein_g * g / 100 * 10) / 10;
       const c = Math.round(per100g.carbs_g * g / 100 * 10) / 10;
       const f = Math.round(per100g.fat_g * g / 100 * 10) / 10;
+      const fiber = per100g.fiber_g != null ? Math.round(per100g.fiber_g * g / 100 * 10) / 10 : undefined;
       return (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.padded}>
           <Text style={[styles.title, { color: colors.text }]}>{productName}</Text>
@@ -251,7 +283,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
               onChangeText={setPortionG}
             />
           </View>
-          <MacroStrip cal={cal} p={p} c={c} f={f} />
+          <MacroStrip cal={cal} p={p} c={c} f={f} fiber={fiber} />
           <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.lime }]} onPress={confirmBarcode}>
             <Text style={[styles.addBtnText, { color: colors.background }]}>Add to Today</Text>
           </TouchableOpacity>
@@ -384,12 +416,13 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
           {filtered.map(r => (
             <TouchableOpacity
               key={r.id}
-              style={[styles.optionCard, { backgroundColor: colors.surface3, borderColor: colors.border, flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}
-              onPress={() => {
-                setResult({ name: r.name, calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g, source: 'manual' });
-                setMode('confirm');
-              }}
-            >
+              style={[styles.optionCard, { backgroundColor: colors.surface3, borderColor: colors.border, flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginBottom: 12 }]}
+                onPress={() => {
+                  setSelectedRecipe(r);
+                  setRecipePortionG('100');
+                  setMode('recipe-portion');
+                }}
+                >
               <Text style={[styles.optionTitle, { color: colors.text }]}>{r.name}</Text>
               <Text style={[styles.optionDesc, { color: colors.text3 }]}>
                 {r.calories} kcal · P {r.protein_g}g · C {r.carbs_g}g · F {r.fat_g}g
@@ -402,6 +435,98 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     );
   };
 
+  const renderRecipePortion = () => {
+    if (!selectedRecipe) return null;
+
+    const g = parseFloat(recipePortionG) || 100;
+
+    const calories = Math.round((selectedRecipe.calories * g) / 100);
+    const protein = Math.round((selectedRecipe.protein_g * g) / 100 * 10) / 10;
+    const carbs = Math.round((selectedRecipe.carbs_g * g) / 100 * 10) / 10;
+    const fat = Math.round((selectedRecipe.fat_g * g) / 100 * 10) / 10;
+
+    return (
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.padded}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          {selectedRecipe.name}
+        </Text>
+
+        <Text style={[styles.subtitle, { color: colors.text3 }]}>
+          Adjust portion size
+        </Text>
+
+        <View
+          style={[
+            styles.portionRow,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface3,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.portionLabel,
+              { color: colors.text3 },
+            ]}
+          >
+            Portion (g)
+          </Text>
+
+          <TextInput
+            style={[
+              styles.portionInput,
+              { color: colors.text },
+            ]}
+            keyboardType="numeric"
+            value={recipePortionG}
+            onChangeText={setRecipePortionG}
+          />
+        </View>
+
+        <MacroStrip
+          cal={calories}
+          p={protein}
+          c={carbs}
+          f={fat}
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.addBtn,
+            { backgroundColor: colors.lime },
+          ]}
+          onPress={() => {
+            setResult({
+              name: selectedRecipe.name,
+              calories,
+              protein_g: protein,
+              carbs_g: carbs,
+              fat_g: fat,
+              source: 'manual',
+            });
+
+            setMode('confirm');
+          }}
+        >
+          <Text
+            style={[
+              styles.addBtnText,
+              { color: colors.background },
+            ]}
+          >
+            Continue
+          </Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 32 }} />
+      </ScrollView>
+    );
+  };
+
   const renderConfirm = () => {
     if (!result) return null;
     const sourceLabel = result.source === 'barcode' ? '📷 From barcode' : result.source === 'ai' ? '🤖 AI estimated' : '✏️ Manually entered';
@@ -409,7 +534,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.padded}>
         <Text style={[styles.title, { color: colors.text }]}>{result.name}</Text>
         {result.notes && <Text style={[styles.subtitle, { color: colors.text3 }]}>{result.notes}</Text>}
-        <MacroStrip cal={result.calories} p={result.protein_g} c={result.carbs_g} f={result.fat_g} />
+        <MacroStrip cal={result.calories} p={result.protein_g} c={result.carbs_g} f={result.fat_g} fiber={result.fiber_g} />
         <View style={[styles.sourceTag, { backgroundColor: colors.surface3 }]}>
           <Text style={[styles.sourceText, { color: colors.text3 }]}>{sourceLabel}</Text>
         </View>
@@ -421,7 +546,10 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     );
   };
 
-  const noPadding = mode === 'barcode' || mode === 'ai' || mode === 'my-recipes';
+  const noPadding =
+    mode === 'barcode' ||
+    mode === 'ai' ||
+    mode === 'my-recipes';
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -439,12 +567,13 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
             </TouchableOpacity>
           </View>
           <View style={[{ flex: 1 }, !noPadding && styles.padded]}>
-            {mode === 'select' && renderSelect()}
-            {mode === 'barcode' && renderBarcode()}
-            {mode === 'ai' && renderAI()}
-            {mode === 'manual' && renderManual()}
-            {mode === 'my-recipes' && renderMyRecipes()}
-            {mode === 'confirm' && renderConfirm()}
+              {mode === 'select' && renderSelect()}
+              {mode === 'barcode' && renderBarcode()}
+              {mode === 'ai' && renderAI()}
+              {mode === 'manual' && renderManual()}
+              {mode === 'my-recipes' && renderMyRecipes()}
+              {mode === 'recipe-portion' && renderRecipePortion()}
+              {mode === 'confirm' && renderConfirm()}
           </View>
         </View>
       </View>
