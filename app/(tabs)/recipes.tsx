@@ -266,11 +266,13 @@ export default function RecipesScreen() {
 
         {/* TikTok import card */}
         <View style={[styles.importCard, {
-          backgroundColor: importing ? colors.surface2 : colors.surface,
+          backgroundColor: colors.surface,
           borderColor: importing ? colors.lime : colors.border,
         }]}>
           <View style={styles.importHeader}>
-            <Text style={styles.importIcon}>{importing ? '⏳' : '📱'}</Text>
+            <View style={[styles.importIconWrap, { backgroundColor: importing ? colors.limeDim : colors.surface2 }]}>
+              <Text style={styles.importIcon}>{importing ? '⏳' : '📱'}</Text>
+            </View>
             <View style={styles.importHeaderText}>
               <Text style={[styles.importTitle, { color: colors.text }]}>
                 {importing ? t('recipesImporting') : t('recipesImportTitle')}
@@ -283,21 +285,213 @@ export default function RecipesScreen() {
           </View>
           {!importing && (
             <>
-              <View style={[styles.shareHint, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
-                <Text style={[styles.shareStep, { color: colors.text3 }]}>{t('recipesStep1')}</Text>
-                <Text style={[styles.shareStep, { color: colors.text3 }]}>2. Tap <Text style={{ color: colors.text }}>Share</Text> → <Text style={{ color: colors.lime }}>Copy link</Text></Text>
-                <Text style={[styles.shareStep, { color: colors.text3 }]}>{t('recipesStep3')}</Text>
+              <View style={[styles.stepsBox, { backgroundColor: colors.surface2 }]}>
+                {[t('recipesStep1'), 'Tap Share → Copy link', t('recipesStep3')].map((text, i) => (
+                  <View key={i} style={[styles.importStep, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                    <View style={[styles.importStepBadge, { backgroundColor: colors.limeDim }]}>
+                      <Text style={[styles.importStepNum, { color: colors.lime }]}>{i + 1}</Text>
+                    </View>
+                    <Text style={[styles.importStepText, { color: colors.text2 }]}>{text}</Text>
+                  </View>
+                ))}
               </View>
               <TouchableOpacity
-                style={[styles.pasteBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
+                style={[styles.pasteBtn, { backgroundColor: colors.lime }]}
                 onPress={checkClipboard}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.lime }]}>{t('recipesPaste')}</Text>
+                <Text style={[styles.pasteBtnText, { color: colors.background }]}>{t('recipesPaste')}</Text>
               </TouchableOpacity>
             </>
           )}
           {importError && <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>}
         </View>
+
+        {/* ── TikTok imports (in-memory) ────────────────────────────────────── */}
+        {importedRecipes.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionRow}>
+              <Text style={[styles.sectionLabel, { color: colors.text3 }]}>{t('recipesSession')}</Text>
+              <View style={[styles.countBadge, { backgroundColor: colors.limeDim }]}>
+                <Text style={[styles.countBadgeText, { color: colors.lime }]}>{importedRecipes.length}</Text>
+              </View>
+            </View>
+            {importedRecipes.map((recipe, idx) => {
+              const open = expandedRecipe === idx;
+              const state = importStates[idx] ?? defaultImportState();
+
+              return (
+                <View
+                  key={idx}
+                  style={[styles.recipeCard, { backgroundColor: colors.surface, borderColor: open ? colors.lime : colors.border }]}
+                >
+                  <TouchableOpacity onPress={() => setExpandedRecipe(open ? null : idx)} activeOpacity={0.85}>
+                    <View style={styles.recipeCardHeader}>
+                      <View style={styles.recipeCardLeft}>
+                        <Text style={[styles.recipeName, { color: colors.text }]} numberOfLines={2}>{recipe.title}</Text>
+                        <View style={styles.recipeMeta}>
+                          <View style={[styles.metaChip, { backgroundColor: colors.surface2 }]}>
+                            <Text style={[styles.metaChipText, { color: colors.text3 }]}>⏱ {recipe.prep_time}</Text>
+                          </View>
+                          <View style={[styles.metaChip, { backgroundColor: colors.surface2 }]}>
+                            <Text style={[styles.metaChipText, { color: colors.text3 }]}>{recipe.difficulty}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.recipeCardRight}>
+                        <View style={[styles.calsBadge, { backgroundColor: colors.limeDim }]}>
+                          <Text style={[styles.calsNum, { color: colors.lime }]}>{recipe.macros.calories}</Text>
+                          <Text style={[styles.calsUnit, { color: colors.lime }]}>kcal</Text>
+                        </View>
+                        <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {open && (
+                    <>
+                      <View style={[styles.macroStrip, { backgroundColor: colors.surface2 }]}>
+                        {[
+                          { label: 'Protein', val: recipe.macros.protein_g, color: colors.lime },
+                          { label: 'Carbs', val: recipe.macros.carbs_g, color: colors.blue },
+                          { label: 'Fat', val: recipe.macros.fat_g, color: colors.orange },
+                        ].map((m, i) => (
+                          <View key={m.label} style={[styles.macroItem, i > 0 && { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
+                            <Text style={[styles.macroItemVal, { color: m.color }]}>
+                              {m.val}<Text style={styles.macroItemUnit}>g</Text>
+                            </Text>
+                            <Text style={[styles.macroItemLabel, { color: colors.text3 }]}>{m.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      <Text style={[styles.subheading, { color: colors.text3 }]}>{t('ingredients')}</Text>
+                      {recipe.ingredients.map((ing, i) => (
+                        <View key={i} style={styles.ingredientRow}>
+                          <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
+                          <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                        </View>
+                      ))}
+
+                      {recipe.steps.length > 0 && (
+                        <>
+                          <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>{t('steps')}</Text>
+                          {recipe.steps.map((step, i) => (
+                            <View key={i} style={styles.stepRow}>
+                              <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
+                                <Text style={[styles.stepNumText, { color: colors.lime }]}>{i + 1}</Text>
+                              </View>
+                              <Text style={[styles.stepText, { color: colors.text2 }]}>{step}</Text>
+                            </View>
+                          ))}
+                        </>
+                      )}
+
+                      {/* Add to Plan */}
+                      <View style={[styles.addToPlanBox, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}>
+                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('addToPlan')}</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayChipsScroll}>
+                          <View style={styles.dayChips}>
+                            {planDays.map(day => {
+                              const sel = state.addDay === day;
+                              return (
+                                <TouchableOpacity
+                                  key={day}
+                                  style={[styles.dayChip, { backgroundColor: sel ? colors.lime : colors.surface3, borderColor: sel ? colors.lime : colors.border2 }]}
+                                  onPress={() => updateImportState(idx, { addDay: day, added: false })}
+                                >
+                                  <Text style={[styles.dayChipText, { color: sel ? colors.background : colors.text3 }]}>
+                                    {day.slice(0, 3)}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </ScrollView>
+                        <View style={styles.slotRow}>
+                          {MEAL_SLOTS.map((slot, slotIdx) => {
+                            const sel = state.addSlot === slotIdx;
+                            return (
+                              <TouchableOpacity
+                                key={slot}
+                                style={[styles.slotChip, { backgroundColor: sel ? colors.blue + '33' : colors.surface3, borderColor: sel ? colors.blue : colors.border2 }]}
+                                onPress={() => updateImportState(idx, { addSlot: slotIdx, added: false })}
+                              >
+                                <Text style={[styles.slotChipText, { color: sel ? colors.blue : colors.text3 }]}>{slot}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.addBtn, { backgroundColor: state.added ? colors.surface3 : state.addDay ? colors.lime : colors.surface3, opacity: state.addDay ? 1 : 0.4 }]}
+                          onPress={() => handleAddToDay(idx)}
+                          disabled={!state.addDay || state.added}
+                        >
+                          <Text style={[styles.addBtnText, { color: state.added ? colors.lime : colors.background }]}>
+                            {state.added ? `✓ ${state.addDay}` : state.addDay ? `+ ${state.addDay}` : t('selectDay')}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Adapt results */}
+                      {state.adaptError && (
+                        <Text style={[styles.importError, { color: colors.orange, marginTop: 6 }]}>{state.adaptError}</Text>
+                      )}
+                      {state.adaptedIngredients && (
+                        <View style={[styles.adaptResults, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
+                          <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('lidlSubs')}</Text>
+                          {state.adaptedIngredients.map((item, i) => (
+                            <View key={i} style={styles.adaptRow}>
+                              <View style={styles.adaptRowLeft}>
+                                <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
+                                {item.lidlProduct
+                                  ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
+                                  : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>{t('notAtLidl')}</Text>
+                                }
+                                {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
+                              </View>
+                              <View style={[styles.adaptDot, { backgroundColor: item.lidlProduct ? colors.lime : colors.surface2 }]} />
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Action row: Adapt + Save side by side */}
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity
+                          style={[styles.adaptActionBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
+                          onPress={() => handleAdapt(idx)}
+                          disabled={state.adapting}
+                        >
+                          {state.adapting
+                            ? <ActivityIndicator color={colors.lime} size="small" />
+                            : <Text style={styles.adaptBtnIcon}>🛒</Text>
+                          }
+                          <Text style={[styles.adaptActionText, { color: state.adapting ? colors.text3 : colors.text2 }]}>
+                            {state.adapting ? t('findingLidl') : t('adaptLidl')}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.saveActionBtn, { backgroundColor: state.savedOk ? colors.surface3 : colors.lime, opacity: state.saving ? 0.7 : 1 }]}
+                          onPress={() => handleSaveImported(idx)}
+                          disabled={state.saving || state.savedOk}
+                        >
+                          {state.saving
+                            ? <ActivityIndicator color={colors.background} size="small" />
+                            : <Text style={[styles.saveActionText, { color: state.savedOk ? colors.lime : colors.background }]}>
+                                {state.savedOk
+                                  ? (state.adaptedIngredients ? t('savedLidl') : t('savedRecipe'))
+                                  : t('saveRecipe')}
+                              </Text>
+                          }
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* ── My Recipes (from Supabase) ──────────────────────────────────── */}
         <View style={styles.section}>
@@ -451,177 +645,6 @@ export default function RecipesScreen() {
           })}
         </View>
 
-        {/* ── TikTok imports (in-memory) ────────────────────────────────────── */}
-        {importedRecipes.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: colors.text3 }]}>{t('recipesSession')}</Text>
-            {importedRecipes.map((recipe, idx) => {
-              const open = expandedRecipe === idx;
-              const state = importStates[idx] ?? defaultImportState();
-
-              return (
-                <View
-                  key={idx}
-                  style={[styles.recipeCard, { backgroundColor: colors.surface, borderColor: open ? colors.lime : colors.border }]}
-                >
-                  <TouchableOpacity onPress={() => setExpandedRecipe(open ? null : idx)} activeOpacity={0.85}>
-                    <View style={styles.recipeCardHeader}>
-                      <View style={styles.recipeCardLeft}>
-                        <Text style={[styles.recipeName, { color: colors.text }]}>{recipe.title}</Text>
-                        <View style={styles.recipeMeta}>
-                          <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>⏱ {recipe.prep_time}</Text>
-                          <Text style={[styles.recipeMetaText, { color: colors.text3 }]}>  {recipe.difficulty}</Text>
-                          <Text style={[styles.recipeMetaText, { color: colors.lime }]}>{recipe.macros.calories} kcal</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.chevron, { color: colors.text3 }]}>{open ? '▲' : '▼'}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {open && (
-                    <>
-                      <View style={styles.macroPills}>
-                        {[
-                          { label: 'P', val: `${recipe.macros.protein_g}g`, color: colors.lime },
-                          { label: 'C', val: `${recipe.macros.carbs_g}g`, color: colors.blue },
-                          { label: 'F', val: `${recipe.macros.fat_g}g`, color: colors.orange },
-                        ].map(m => (
-                          <View key={m.label} style={[styles.macroPill, { backgroundColor: colors.surface2 }]}>
-                            <Text style={[styles.macroPillVal, { color: m.color }]}>{m.val}</Text>
-                            <Text style={[styles.macroPillLabel, { color: colors.text3 }]}>{m.label}</Text>
-                          </View>
-                        ))}
-                      </View>
-
-                      <Text style={[styles.subheading, { color: colors.text3 }]}>{t('ingredients')}</Text>
-                      {recipe.ingredients.map((ing, i) => (
-                        <View key={i} style={styles.ingredientRow}>
-                          <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
-                          <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
-                        </View>
-                      ))}
-
-                      {recipe.steps.length > 0 && (
-                        <>
-                          <Text style={[styles.subheading, { color: colors.text3, marginTop: 14 }]}>{t('steps')}</Text>
-                          {recipe.steps.map((step, i) => (
-                            <View key={i} style={styles.stepRow}>
-                              <View style={[styles.stepNum, { backgroundColor: colors.limeDim }]}>
-                                <Text style={[styles.stepNumText, { color: colors.lime }]}>{i + 1}</Text>
-                              </View>
-                              <Text style={[styles.stepText, { color: colors.text2 }]}>{step}</Text>
-                            </View>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Add to Plan */}
-                      <View style={[styles.addToPlanBox, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}>
-                        <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('addToPlan')}</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayChipsScroll}>
-                          <View style={styles.dayChips}>
-                            {planDays.map(day => {
-                              const sel = state.addDay === day;
-                              return (
-                                <TouchableOpacity
-                                  key={day}
-                                  style={[styles.dayChip, { backgroundColor: sel ? colors.lime : colors.surface3, borderColor: sel ? colors.lime : colors.border2 }]}
-                                  onPress={() => updateImportState(idx, { addDay: day, added: false })}
-                                >
-                                  <Text style={[styles.dayChipText, { color: sel ? colors.background : colors.text3 }]}>
-                                    {day.slice(0, 3)}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        </ScrollView>
-                        <View style={styles.slotRow}>
-                          {MEAL_SLOTS.map((slot, slotIdx) => {
-                            const sel = state.addSlot === slotIdx;
-                            return (
-                              <TouchableOpacity
-                                key={slot}
-                                style={[styles.slotChip, { backgroundColor: sel ? colors.blue + '33' : colors.surface3, borderColor: sel ? colors.blue : colors.border2 }]}
-                                onPress={() => updateImportState(idx, { addSlot: slotIdx, added: false })}
-                              >
-                                <Text style={[styles.slotChipText, { color: sel ? colors.blue : colors.text3 }]}>{slot}</Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                        <TouchableOpacity
-                          style={[styles.addBtn, { backgroundColor: state.added ? colors.surface3 : state.addDay ? colors.lime : colors.surface3, opacity: state.addDay ? 1 : 0.4 }]}
-                          onPress={() => handleAddToDay(idx)}
-                          disabled={!state.addDay || state.added}
-                        >
-                          <Text style={[styles.addBtnText, { color: state.added ? colors.lime : colors.background }]}>
-                            {state.added ? `✓ ${state.addDay}` : state.addDay ? `+ ${state.addDay}` : t('selectDay')}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Adapt with Lidl */}
-                      <View style={styles.adaptSection}>
-                        <TouchableOpacity
-                          style={[styles.adaptBtn, { backgroundColor: colors.surface2, borderColor: colors.border2 }]}
-                          onPress={() => handleAdapt(idx)}
-                          disabled={state.adapting}
-                        >
-                          {state.adapting
-                            ? <ActivityIndicator color={colors.lime} size="small" style={{ marginRight: 8 }} />
-                            : <Text style={styles.adaptBtnIcon}>🛒</Text>
-                          }
-                          <Text style={[styles.adaptBtnText, { color: state.adapting ? colors.text3 : colors.lime }]}>
-                            {state.adapting ? t('findingLidl') : t('adaptLidl')}
-                          </Text>
-                        </TouchableOpacity>
-                        {state.adaptError && (
-                          <Text style={[styles.importError, { color: colors.orange, marginTop: 6 }]}>{state.adaptError}</Text>
-                        )}
-                        {state.adaptedIngredients && (
-                          <View style={[styles.adaptResults, { backgroundColor: colors.surface3, borderColor: colors.border2 }]}>
-                            <Text style={[styles.subheading, { color: colors.text3, marginTop: 0, marginBottom: 10 }]}>{t('lidlSubs')}</Text>
-                            {state.adaptedIngredients.map((item, i) => (
-                              <View key={i} style={styles.adaptRow}>
-                                <View style={styles.adaptRowLeft}>
-                                  <Text style={[styles.adaptOriginal, { color: colors.text3 }]}>{item.original}</Text>
-                                  {item.lidlProduct
-                                    ? <Text style={[styles.adaptProduct, { color: colors.lime }]}>→ {item.lidlProduct}</Text>
-                                    : <Text style={[styles.adaptProduct, { color: colors.text3 }]}>{t('notAtLidl')}</Text>
-                                  }
-                                  {item.note ? <Text style={[styles.adaptNote, { color: colors.text3 }]}>{item.note}</Text> : null}
-                                </View>
-                                <View style={[styles.adaptDot, { backgroundColor: item.lidlProduct ? colors.lime : colors.surface2 }]} />
-                              </View>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Save to My Recipes */}
-                      <TouchableOpacity
-                        style={[styles.saveBtn, { backgroundColor: state.savedOk ? colors.surface3 : colors.lime, opacity: state.saving ? 0.7 : 1 }]}
-                        onPress={() => handleSaveImported(idx)}
-                        disabled={state.saving || state.savedOk}
-                      >
-                        {state.saving
-                          ? <ActivityIndicator color={colors.background} size="small" />
-                          : <Text style={[styles.saveBtnText, { color: state.savedOk ? colors.lime : colors.background }]}>
-                              {state.savedOk
-                                ? (state.adaptedIngredients ? t('savedLidl') : t('savedRecipe'))
-                                : t('saveRecipe')}
-                            </Text>
-                        }
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-
         {/* ── Today's plan meals ───────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: colors.text3 }]}>
@@ -760,20 +783,26 @@ const styles = StyleSheet.create({
   header: { paddingTop: 20, paddingHorizontal: 24, paddingBottom: 16 },
   title: { fontSize: 26, fontWeight: '700', marginBottom: 4 },
   subtitle: { fontSize: 13 },
-  importCard: { marginHorizontal: 24, marginBottom: 20, borderWidth: 1, borderRadius: 18, padding: 16 },
-  importHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  importCard: { marginHorizontal: 24, marginBottom: 20, borderWidth: 1, borderRadius: 20, padding: 16 },
+  importHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  importIconWrap: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   importIcon: { fontSize: 22 },
   importHeaderText: { flex: 1 },
-  importTitle: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  importTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   importDesc: { fontSize: 12 },
-  shareHint: { marginTop: 12, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, gap: 6 },
-  shareStep: { fontSize: 13, lineHeight: 19 },
-  pasteBtn: { marginTop: 10, borderWidth: 1, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
-  pasteBtnText: { fontSize: 14, fontWeight: '600' },
+  stepsBox: { borderRadius: 14, overflow: 'hidden', marginBottom: 12 },
+  importStep: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14 },
+  importStepBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  importStepNum: { fontSize: 12, fontWeight: '700' },
+  importStepText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  pasteBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
+  pasteBtnText: { fontSize: 15, fontWeight: '700' },
   importError: { fontSize: 12, marginTop: 8 },
   section: { paddingHorizontal: 24, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', flex: 1 },
+  countBadge: { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  countBadgeText: { fontSize: 11, fontWeight: '700' },
   createBtn: { borderWidth: 1, borderRadius: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   createBtnText: { fontSize: 18, lineHeight: 22, fontWeight: '700' },
   createForm: { borderWidth: 1.5, borderRadius: 18, padding: 16, marginBottom: 14 },
@@ -785,15 +814,27 @@ const styles = StyleSheet.create({
   createError: { fontSize: 12, marginBottom: 10 },
   emptyCard: { borderWidth: 1, borderRadius: 14, padding: 16 },
   emptyText: { fontSize: 13, lineHeight: 18 },
-  recipeCard: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 14 },
-  recipeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  recipeCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 14 },
+  recipeCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   recipeCardLeft: { flex: 1 },
-  recipeName: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
-  recipeMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+  recipeCardRight: { alignItems: 'flex-end', gap: 6 },
+  recipeName: { fontSize: 16, fontWeight: '700', marginBottom: 8, lineHeight: 22 },
+  recipeMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  metaChip: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 8 },
+  metaChipText: { fontSize: 11, fontWeight: '500' },
   recipeMetaText: { fontSize: 12 },
-  chevron: { fontSize: 11, paddingTop: 2 },
+  calsBadge: { borderRadius: 10, paddingVertical: 5, paddingHorizontal: 10, alignItems: 'center' },
+  calsNum: { fontSize: 18, fontWeight: '800', lineHeight: 22 },
+  calsUnit: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  chevron: { fontSize: 11 },
   deleteBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   deleteBtnText: { fontSize: 12, fontWeight: '700' },
+  macroStrip: { flexDirection: 'row', borderRadius: 14, marginTop: 14, marginBottom: 4, overflow: 'hidden' },
+  macroItem: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  macroItemVal: { fontSize: 16, fontWeight: '800' },
+  macroItemUnit: { fontSize: 11, fontWeight: '600' },
+  macroItemLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  // keep old names for My Recipes section compatibility
   macroPills: { flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 4 },
   macroPill: { borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center', minWidth: 56 },
   macroPillVal: { fontSize: 14, fontWeight: '700' },
@@ -818,18 +859,21 @@ const styles = StyleSheet.create({
   addBtn: { borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
   addBtnText: { fontSize: 14, fontWeight: '700' },
   // Adapt with Lidl
-  adaptSection: { marginTop: 14 },
-  adaptBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, gap: 8 },
   adaptBtnIcon: { fontSize: 16 },
-  adaptBtnText: { fontSize: 14, fontWeight: '600' },
-  adaptResults: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 14 },
+  adaptResults: { marginTop: 10, marginBottom: 12, borderWidth: 1, borderRadius: 14, padding: 14 },
   adaptRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 10 },
   adaptRowLeft: { flex: 1 },
   adaptOriginal: { fontSize: 12, marginBottom: 2 },
   adaptProduct: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
   adaptNote: { fontSize: 11, fontStyle: 'italic' },
   adaptDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, flexShrink: 0 },
-  // Save button
+  // Action row (side-by-side adapt + save)
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  adaptActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 12, gap: 6 },
+  adaptActionText: { fontSize: 13, fontWeight: '600' },
+  saveActionBtn: { flex: 1.4, borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  saveActionText: { fontSize: 14, fontWeight: '700' },
+  // keep old save button name for compatibility
   saveBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   saveBtnText: { fontSize: 14, fontWeight: '700' },
   // Plan meals
