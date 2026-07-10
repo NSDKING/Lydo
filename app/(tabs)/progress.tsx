@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
 import { DEFAULT_PROFILE, useProfile, UserProfile } from '@/context/ProfileContext';
+import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // ─── Kitchen Appliances ───────────────────────────────────────────────────────
@@ -117,6 +120,8 @@ export default function ProfileScreen() {
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang, langPref, setLang } = useLang();
   const { profile, saving, saveProfile } = useProfile();
+  const { isPremium } = usePurchases();
+  const router = useRouter();
 
   const [draft, setDraft] = useState<UserProfile>(profile);
   const [saved, setSaved] = useState(false);
@@ -160,6 +165,14 @@ export default function ProfileScreen() {
     await saveProfile(draft);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleManageSubscription = () => {
+    if (isPremium) {
+      RevenueCatUI.presentCustomerCenter();
+    } else {
+      router.push('/paywall');
+    }
   };
 
   const handleSignOut = () => {
@@ -386,6 +399,14 @@ export default function ProfileScreen() {
           {/* Account */}
           <SectionHeader title={t('profileAccount')} colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, gap: 0 }]}>
+            <TouchableOpacity
+              style={[styles.accountBtn, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              onPress={handleManageSubscription}
+            >
+              <Text style={[styles.accountBtnText, { color: isPremium ? colors.text2 : colors.lime }]}>
+                {isPremium ? t('profileManageSubscription') : t('profileUpgradeToPro')}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.accountBtn, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
               onPress={handleSignOut}

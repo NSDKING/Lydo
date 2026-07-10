@@ -13,8 +13,8 @@ import { useLang } from '@/context/LangContext';
 
 const C = Colors.dark;
 
-type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'deficit' | 'activity' | 'nutrition' | 'budget' | 'done';
-const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'deficit', 'activity', 'nutrition', 'budget', 'done'];
+type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'deficit' | 'activity' | 'nutrition' | 'budget' | 'kitchen' | 'done';
+const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'deficit', 'activity', 'nutrition', 'budget', 'kitchen', 'done'];
 const TOTAL_PROGRESS = STEPS.length - 2; // 8: auth → budget
 
 function calcTDEE(p: UserProfile): number {
@@ -29,6 +29,29 @@ function calcRecommended(p: UserProfile, deficitKcal: number): number {
   const delta = p.goal === 'gain' ? 300 : p.goal === 'lose' ? -deficitKcal : 0;
   return tdee + delta;
 }
+
+function calcMacros(calories: number, goal: UserProfile['goal']) {
+  const proteinRatio = goal === 'lose' ? 0.35 : goal === 'gain' ? 0.3 : 0.3;
+  const fatRatio = 0.3;
+  const carbsRatio = 1 - proteinRatio - fatRatio;
+  return {
+    protein_g: Math.round((calories * proteinRatio) / 4),
+    carbs_g: Math.round((calories * carbsRatio) / 4),
+    fat_g: Math.round((calories * fatRatio) / 9),
+  };
+}
+
+const EQUIPMENT = [
+  { id: 'oven',          emoji: '🔥' },
+  { id: 'hob',           emoji: '🍳' },
+  { id: 'wok',           emoji: '🥘' },
+  { id: 'air_fryer',     emoji: '💨' },
+  { id: 'pressure',      emoji: '♨️' },
+  { id: 'slow_cooker',   emoji: '🍲' },
+  { id: 'blender',       emoji: '🥤' },
+  { id: 'food_processor',emoji: '⚙️' },
+  { id: 'bbq',           emoji: '🥩' },
+] as const;
 
 export default function Onboarding() {
   const router = useRouter();
@@ -113,13 +136,15 @@ export default function Onboarding() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // kitchen_equipment excluded until DB migration runs (see ProfileContext.tsx comment)
+        const { kitchen_equipment, ...profileData } = draft;
         await supabase.from('user_profiles').upsert({
-          ...draft, user_id: user.id, updated_at: new Date().toISOString(),
+          ...profileData, user_id: user.id, updated_at: new Date().toISOString(),
         });
       }
     } catch { /* silently fail */ } finally {
       setLoading(false);
-      router.replace('/(tabs)');
+      router.replace('/paywall');
     }
   }
 
@@ -140,7 +165,7 @@ export default function Onboarding() {
           {step === 'welcome' && (
             <View style={s.stepWrap}>
               <Text style={s.bigEmoji}>🥗</Text>
-              <Text style={s.heading}>Lydo</Text>
+              <Text style={s.heading}>Dano</Text>
               <Text style={s.sub}>{t('ob_tagline')}</Text>
               <Text style={s.body}>{t('ob_body')}</Text>
               <Btn label={t('ob_cta')} onPress={() => setIdx(1)} />
@@ -366,11 +391,77 @@ export default function Onboarding() {
             </View>
           )}
 
+          {step === 'kitchen' && (() => {
+            const selected = new Set(draft.kitchen_equipment.split(',').filter(Boolean));
+            const LABELS: Record<string, string> = {
+              oven: t('ob_kitchenOven'), hob: t('ob_kitchenHob'), wok: t('ob_kitchenWok'),
+              air_fryer: t('ob_kitchenAirFryer'), pressure: t('ob_kitchenPressure'),
+              slow_cooker: t('ob_kitchenSlowCooker'), blender: t('ob_kitchenBlender'),
+              food_processor: t('ob_kitchenFoodProc'), bbq: t('ob_kitchenBbq'),
+            };
+            return (
+              <View style={s.stepWrap}>
+                <BackBtn label={t('back')} onPress={back} />
+                <Text style={s.heading}>{t('ob_kitchenTitle')}</Text>
+                <Text style={s.sub}>{t('ob_kitchenSub')}</Text>
+                <View style={s.equipGrid}>
+                  {EQUIPMENT.map(item => {
+                    const on = selected.has(item.id);
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[s.equipCard, on && s.equipCardActive]}
+                        onPress={() => {
+                          const s2 = new Set(selected);
+                          if (s2.has(item.id)) s2.delete(item.id); else s2.add(item.id);
+                          upd({ kitchen_equipment: Array.from(s2).join(',') });
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={s.equipEmoji}>{item.emoji}</Text>
+                        <Text style={[s.equipLabel, on && s.equipLabelActive]}>{LABELS[item.id]}</Text>
+                        {on && <View style={s.equipCheck}><Text style={s.equipCheckTxt}>✓</Text></View>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Btn label={t('continue')} onPress={next} />
+              </View>
+            );
+          })()}
+
           {step === 'done' && (
             <View style={s.stepWrap}>
-              <Text style={s.bigEmoji}>🎉</Text>
+              <Text style={s.bigEmoji}>✨</Text>
               <Text style={s.heading}>{t('ob_doneTitle')}</Text>
               <Text style={s.sub}>{t('ob_doneSub')}</Text>
+
+              <View style={s.revealCard}>
+                <Text style={s.revealCalories}>{draft.daily_calories}</Text>
+                <Text style={s.revealCaloriesUnit}>{t('ob_tdeeUnit')}</Text>
+                <View style={s.revealMacroRow}>
+                  {(() => {
+                    const m = calcMacros(draft.daily_calories, draft.goal);
+                    return (
+                      <>
+                        <View style={s.revealMacro}>
+                          <Text style={s.revealMacroVal}>{m.protein_g}g</Text>
+                          <Text style={s.revealMacroLabel}>{t('ob_protein')}</Text>
+                        </View>
+                        <View style={s.revealMacro}>
+                          <Text style={s.revealMacroVal}>{m.carbs_g}g</Text>
+                          <Text style={s.revealMacroLabel}>{t('ob_carbs')}</Text>
+                        </View>
+                        <View style={s.revealMacro}>
+                          <Text style={s.revealMacroVal}>{m.fat_g}g</Text>
+                          <Text style={s.revealMacroLabel}>{t('ob_fat')}</Text>
+                        </View>
+                      </>
+                    );
+                  })()}
+                </View>
+              </View>
+
               <Text style={s.body}>{t('ob_doneBody')}</Text>
               <Btn label={t('ob_doneCta')} onPress={doFinish} loading={loading} />
             </View>
@@ -510,6 +601,22 @@ const s = StyleSheet.create({
   optLabelActive: { color: C.lime },
   optDesc: { fontSize: 13, color: C.text3 },
 
+  revealCard: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 28,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  revealCalories: { fontSize: 44, fontWeight: '800', color: C.lime },
+  revealCaloriesUnit: { fontSize: 13, color: C.text3, marginTop: 2, marginBottom: 20 },
+  revealMacroRow: { flexDirection: 'row', gap: 28 },
+  revealMacro: { alignItems: 'center' },
+  revealMacroVal: { fontSize: 18, fontWeight: '700', color: C.text },
+  revealMacroLabel: { fontSize: 11, color: C.text3, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+
   hintBox: {
     backgroundColor: C.limeDim2,
     borderRadius: 10,
@@ -541,4 +648,39 @@ const s = StyleSheet.create({
   quickBtnActive: { backgroundColor: C.limeDim, borderColor: C.lime },
   quickBtnText: { fontSize: 15, fontWeight: '600', color: C.text2 },
   quickBtnTextActive: { color: C.lime },
+
+  equipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  equipCard: {
+    width: '31%',
+    aspectRatio: 1,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    gap: 6,
+  },
+  equipCardActive: { borderColor: C.lime, backgroundColor: C.limeDim },
+  equipEmoji: { fontSize: 34 },
+  equipLabel: { fontSize: 10, color: C.text2, textAlign: 'center', fontWeight: '600', paddingHorizontal: 4 },
+  equipLabelActive: { color: C.lime },
+  equipCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.lime,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  equipCheckTxt: { fontSize: 10, color: C.background, fontWeight: '800' },
 });

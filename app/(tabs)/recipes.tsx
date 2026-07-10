@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
+import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   AdaptedIngredient,
@@ -12,7 +13,9 @@ import {
   TiktokRecipe,
   UserRecipe,
 } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -30,6 +33,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
 const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+const FREE_IMPORT_LIMIT = 2;
+const IMPORT_COUNT_KEY = 'tiktok_import_count';
 
 interface ImportState {
   addDay: string | null;
@@ -51,6 +56,14 @@ export default function RecipesScreen() {
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang } = useLang();
   const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
+  const { isPremium } = usePurchases();
+  const router = useRouter();
+
+  // ── Free-tier import limit ──────────────────────────────────────────────────
+  const [importCount, setImportCount] = useState(0);
+  useEffect(() => {
+    AsyncStorage.getItem(IMPORT_COUNT_KEY).then(v => setImportCount(v ? parseInt(v, 10) || 0 : 0));
+  }, []);
 
   // ── My Recipes (Supabase) ──────────────────────────────────────────────────
   const [myRecipes, setMyRecipes] = useState<UserRecipe[]>([]);
@@ -200,6 +213,11 @@ export default function RecipesScreen() {
   };
 
   const handleImportUrl = async (url: string) => {
+    if (!isPremium && importCount >= FREE_IMPORT_LIMIT) {
+      setImportError(t('recipesImportLimitReached'));
+      router.push('/paywall');
+      return;
+    }
     setImporting(true);
     setImportError(null);
     try {
@@ -207,6 +225,11 @@ export default function RecipesScreen() {
       setImportedRecipes(prev => [recipe, ...prev]);
       setImportStates(prev => [defaultImportState(), ...prev]);
       setExpandedRecipe(0);
+      if (!isPremium) {
+        const next = importCount + 1;
+        setImportCount(next);
+        AsyncStorage.setItem(IMPORT_COUNT_KEY, String(next));
+      }
     } catch (err) {
       setImportError((err as Error).message);
     } finally {
@@ -301,6 +324,11 @@ export default function RecipesScreen() {
               >
                 <Text style={[styles.pasteBtnText, { color: colors.background }]}>{t('recipesPaste')}</Text>
               </TouchableOpacity>
+              {!isPremium && (
+                <Text style={[styles.importLimitNote, { color: colors.text3 }]}>
+                  {Math.max(FREE_IMPORT_LIMIT - importCount, 0)} {t('recipesFreeImportsLeft')}
+                </Text>
+              )}
             </>
           )}
           {importError && <Text style={[styles.importError, { color: colors.orange }]}>{importError}</Text>}
@@ -798,6 +826,7 @@ const styles = StyleSheet.create({
   pasteBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
   pasteBtnText: { fontSize: 15, fontWeight: '700' },
   importError: { fontSize: 12, marginTop: 8 },
+  importLimitNote: { fontSize: 11, marginTop: 8, textAlign: 'center' },
   section: { paddingHorizontal: 24, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   sectionLabel: { fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', flex: 1 },

@@ -132,6 +132,23 @@ export async function generateMenuPlan(params?: {
   return data.plan;
 }
 
+export async function generateMenuTeaser(params?: {
+  preferences?: string;
+  dietaryRestrictions?: string;
+  targetCalories?: number;
+  mealsPerDay?: number;
+  teaserDay?: string;
+}): Promise<MenuPlan> {
+  const data = await post<{ plan: MenuPlan }>('/menu/teaser', {
+    mealsPerDay: params?.mealsPerDay ?? 3,
+    targetCalories: params?.targetCalories ?? 2000,
+    preferences: params?.preferences ?? '',
+    dietaryRestrictions: params?.dietaryRestrictions ?? '',
+    teaserDay: params?.teaserDay,
+  }, 60_000);
+  return data.plan;
+}
+
 export async function clearWeeklyPlan(userId: string): Promise<void> {
   await post('/menu/clear', { userId }, 10_000);
 }
@@ -142,7 +159,8 @@ export async function fetchMealSteps(mealName: string, ingredients: string[], la
 }
 
 export async function swapMeal(dayPlan: DayPlan, mealIndex: number, preferences?: string): Promise<Meal> {
-  const data = await post<{ meal: Meal }>('/menu/swap', { dayPlan, mealIndex, preferences }, 60_000);
+  const { data: { session } } = await supabase.auth.getSession();
+  const data = await post<{ meal: Meal }>('/menu/swap', { dayPlan, mealIndex, preferences, userId: session?.user?.id }, 60_000);
   return data.meal;
 }
 

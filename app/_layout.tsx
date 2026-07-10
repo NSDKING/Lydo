@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LangProvider } from '@/context/LangContext';
+import { PurchasesProvider } from '@/context/PurchasesContext';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -16,6 +17,7 @@ export default function RootLayout() {
 
   return (
     <LangProvider>
+    <PurchasesProvider>
     <ShareIntentProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
@@ -29,6 +31,7 @@ export default function RootLayout() {
         <StatusBar style="auto" />
       </ThemeProvider>
     </ShareIntentProvider>
+    </PurchasesProvider>
     </LangProvider>
   );
 }

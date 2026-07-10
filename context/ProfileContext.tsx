@@ -35,6 +35,8 @@ export interface UserProfile {
   weekly_budget_eur: number;
   preferences: string;
   dietary_restrictions: string;
+  // TODO: add column to supabase: alter table public.user_profiles add column kitchen_equipment text default '';
+  kitchen_equipment: string;
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
@@ -48,6 +50,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   weekly_budget_eur: 80,
   preferences: '',
   dietary_restrictions: '',
+  kitchen_equipment: '',
 };
 
 interface ProfileContextValue {

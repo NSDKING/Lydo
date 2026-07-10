@@ -2,6 +2,7 @@ import { Colors } from '@/constants/theme';
 import { DAY_NAMES } from '@/constants/i18n';
 import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
+import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   AdaptedIngredient,
@@ -15,6 +16,7 @@ import {
   saveUserRecipe,
   swapMeal as apiSwapMeal,
 } from '@/services/api';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -57,6 +59,8 @@ export default function PlanScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang } = useLang();
+  const router = useRouter();
+  const { isPremium } = usePurchases();
   const MEAL_TYPES = [t('breakfast'), t('lunch'), t('dinner'), t('snack')];
   const {
     isLoading, error, refresh,
@@ -82,7 +86,10 @@ export default function PlanScreen() {
     fetchLidlCatalog().then(setCatalog).catch(() => {});
   }, []);
 
-  const dayPlan = getEffectiveDayPlan(selectedDay);
+  const isDayGated = (day: string) => !isPremium && day !== TODAY;
+  const selectedDayGated = isDayGated(selectedDay);
+
+  const dayPlan = selectedDayGated ? null : getEffectiveDayPlan(selectedDay);
   const logged  = loggedMeals[selectedDay]  ?? new Set<number>();
   const locked  = lockedMeals[selectedDay]  ?? new Set<number>();
   const barPercent = dayPlan ? Math.min(100, Math.round((dayPlan.total_calories / 2000) * 100)) : 0;
@@ -270,13 +277,14 @@ export default function PlanScreen() {
           style={styles.dayScroll} contentContainerStyle={styles.dayScrollContent}>
           {DAYS.map(day => {
             const active = selectedDay === day;
+            const gated = isDayGated(day);
             return (
               <TouchableOpacity key={day}
                 style={[styles.dayChip, { backgroundColor: colors.surface, borderColor: colors.border },
                   active && { borderColor: colors.lime, backgroundColor: colors.limeDim }]}
                 onPress={() => { setSelectedDay(day); setExpandedMeal(null); setEditingIdx(null); }}
               >
-                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{DAY_NAMES[lang][day]}</Text>
+                <Text style={[styles.dayChipLabel, { color: colors.text3 }]}>{gated ? '🔒' : DAY_NAMES[lang][day]}</Text>
                 <Text style={[styles.dayChipName, { color: active ? colors.lime : colors.text2 }]}>{DAY_NAMES[lang][day]}</Text>
               </TouchableOpacity>
             );
@@ -302,15 +310,31 @@ export default function PlanScreen() {
         </View>
 
         <View style={styles.mealsSection}>
-          {isLoading && (
-            <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <ActivityIndicator color={colors.lime} />
-              <Text style={[styles.loadingText, { color: colors.text3 }]}>{t('todayGenerating')}</Text>
+          {selectedDayGated ? (
+            <View style={[styles.lockedCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.lockedIcon}>🔒</Text>
+              <Text style={[styles.lockedTitle, { color: colors.text }]}>{t('planLockedTitle')}</Text>
+              <Text style={[styles.lockedDesc, { color: colors.text3 }]}>{t('planLockedDesc')}</Text>
+              <TouchableOpacity
+                style={[styles.lockedCta, { backgroundColor: colors.lime }]}
+                onPress={() => router.push('/paywall')}
+              >
+                <Text style={[styles.lockedCtaText, { color: colors.background }]}>{t('planUnlockCta')}</Text>
+              </TouchableOpacity>
             </View>
+          ) : (
+            <>
+              {isLoading && (
+                <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <ActivityIndicator color={colors.lime} />
+                  <Text style={[styles.loadingText, { color: colors.text3 }]}>{t('todayGenerating')}</Text>
+                </View>
+              )}
+              {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
+            </>
           )}
-          {error && <Text style={[styles.errorText, { color: colors.orange }]}>{error}</Text>}
 
-          {!isLoading && dayPlan?.meals.map((meal, idx) => {
+          {!isLoading && !selectedDayGated && dayPlan?.meals.map((meal, idx) => {
             const expanded  = expandedMeal === idx;
             const isLogged  = logged.has(idx);
             const isLocked  = locked.has(idx);
@@ -761,6 +785,12 @@ const styles = StyleSheet.create({
   mealsSection: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100, gap: 12 },
   loadingCard: { borderRadius: 16, borderWidth: 1, paddingVertical: 20, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 14 },
+  lockedCard: { borderRadius: 20, borderWidth: 1, paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center', gap: 8 },
+  lockedIcon: { fontSize: 36, marginBottom: 4 },
+  lockedTitle: { fontSize: 18, fontWeight: '700' },
+  lockedDesc: { fontSize: 13, textAlign: 'center', lineHeight: 18, marginBottom: 12 },
+  lockedCta: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 28 },
+  lockedCtaText: { fontSize: 14, fontWeight: '700' },
   errorText: { fontSize: 13, textAlign: 'center', marginVertical: 8 },
   mealCard: { borderWidth: 1, borderRadius: 20, overflow: 'hidden' },
   mealCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 14, paddingHorizontal: 16, paddingBottom: 10 },

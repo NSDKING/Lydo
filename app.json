@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Lydo – Meal Planner",
+    "name": "Dano – Meal Planner",
     "slug": "lydo",
     "version": "1.1.2",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "17",
+      "buildNumber": "18",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",

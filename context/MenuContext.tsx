@@ -8,12 +8,16 @@ import {
   clearWeeklyPlan,
   fetchWeeklyPlan,
   generateMenuPlan,
+  generateMenuTeaser,
   getWeekKey,
   saveUserRecipe,
   swapMeal as apiSwapMeal,
 } from '@/services/api';
 import { supabase } from '@/lib/supabase';
 import { useProfile } from '@/context/ProfileContext';
+import { usePurchases } from '@/context/PurchasesContext';
+
+const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -160,6 +164,7 @@ function getMealName(plan: MenuPlan | null, overrides: MealOverrides, day: strin
 
 export function MenuProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useProfile();
+  const { isPremium, isReady: purchasesReady } = usePurchases();
   const [plan, setPlan] = useState<MenuPlan | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,6 +179,9 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; }, [profile]);
+
+  const isPremiumRef = useRef(isPremium);
+  useEffect(() => { isPremiumRef.current = isPremium; }, [isPremium]);
 
   const planRef = useRef(plan);
   useEffect(() => { planRef.current = plan; }, [plan]);
@@ -242,6 +250,24 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       const weekKey = getWeekKey();
+
+      // Free tier: Day-1 teaser only (Haiku) — never spend a Sonnet week on a non-payer.
+      // The full plan generates automatically once isPremium flips true (see effect below).
+      if (!isPremiumRef.current) {
+        const p = profileRef.current;
+        const teaser = await generateMenuTeaser({
+          targetCalories: p.daily_calories,
+          preferences: p.preferences || undefined,
+          dietaryRestrictions: p.dietary_restrictions || undefined,
+          teaserDay: TODAY,
+        });
+        setPlan(teaser);
+        setPlanExistsInDB(false);
+        setLoggedMeals({});
+        setLockedMeals({});
+        setMealOverrides({});
+        return;
+      }
 
       if (!forceRegenerate) {
         const cached = await fetchWeeklyPlan(weekKey);
@@ -343,7 +369,19 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     console.log(`Next week plan pre-generated: ${nextWeekKey}`);
   }
 
-  useEffect(() => { load(); }, [load]);
+  // Wait for RevenueCat's entitlement check to resolve before deciding teaser vs. full plan —
+  // otherwise a premium user on cold start could briefly get gated to the free teaser path.
+  useEffect(() => { if (purchasesReady) load(); }, [load, purchasesReady]);
+
+  // Upgrade from teaser to the full Sonnet week the moment entitlement flips on —
+  // covers purchase, restore, and Customer Center changes from any screen, not just the paywall.
+  const prevPremiumRef = useRef(isPremium);
+  useEffect(() => {
+    if (isPremium && !prevPremiumRef.current && didInitialLoad.current) {
+      load(true);
+    }
+    prevPremiumRef.current = isPremium;
+  }, [isPremium, load]);
 
   // ── Logging ────────────────────────────────────────────────────────────────
 
