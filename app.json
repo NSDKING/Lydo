@@ -58,6 +58,14 @@
             "backgroundColor": "#080808"
           }
         }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Dano reads your step count to fine-tune your daily calorie target.",
+          "NSHealthUpdateUsageDescription": "Dano logs the meals you eat to Apple Health.",
+          "background": false
+        }
       ]
     ],
     "experiments": {

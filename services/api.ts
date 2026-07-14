@@ -138,6 +138,7 @@ export async function generateMenuTeaser(params?: {
   targetCalories?: number;
   mealsPerDay?: number;
   teaserDay?: string;
+  userId?: string;
 }): Promise<MenuPlan> {
   const data = await post<{ plan: MenuPlan }>('/menu/teaser', {
     mealsPerDay: params?.mealsPerDay ?? 3,
@@ -145,6 +146,7 @@ export async function generateMenuTeaser(params?: {
     preferences: params?.preferences ?? '',
     dietaryRestrictions: params?.dietaryRestrictions ?? '',
     teaserDay: params?.teaserDay,
+    userId: params?.userId,
   }, 60_000);
   return data.plan;
 }

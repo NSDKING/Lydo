@@ -370,7 +370,7 @@ const s = StyleSheet.create({
 
   // Cards
   card:         { backgroundColor: M.card, borderRadius: 16, overflow: 'hidden' },
-  mealRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 928, paddingHorizontal: 15 },
+  mealRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 17, paddingHorizontal: 15 },
   mealBorder:   { borderBottomWidth: 1, borderBottomColor: M.line },
   mealKind:     { fontSize: 10.5, letterSpacing: 0.7, textTransform: 'uppercase', color: M.kindLabel, marginBottom: 3 },
   mealName:     { fontSize: 14.5, fontWeight: '600', color: M.ink },

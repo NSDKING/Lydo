@@ -2,6 +2,7 @@ import { Colors } from '@/constants/theme';
 import { DAY_NAMES } from '@/constants/i18n';
 import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
+import { useProfile } from '@/context/ProfileContext';
 import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -16,6 +17,7 @@ import {
   saveUserRecipe,
   swapMeal as apiSwapMeal,
 } from '@/services/api';
+import { scaleIngredient } from '@/utils/ingredientScale';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -521,6 +523,9 @@ interface SwapModalProps {
 
 function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecipe, onCheapen, onApplyCheapen, onConfirm, onPatch, onClose }: SwapModalProps) {
   const { t } = useLang();
+  const { isPremium } = usePurchases();
+  const { profile } = useProfile();
+  const householdSize = isPremium ? profile.household_size : 1;
   const set = (p: Partial<SwapState>) => onPatch(p);
   const [recipeSearch, setRecipeSearch] = React.useState('');
 
@@ -666,7 +671,7 @@ function SwapModal({ state, colors, onAIGenerate, onLoadMyRecipes, onSelectRecip
                 <View style={styles.previewIngredients}>
                   <Text style={[styles.inputLabel, { color: colors.text3, marginBottom: 6 }]}>{t('ingredients')}</Text>
                   {state.candidate.ingredients.map((ing, i) => (
-                    <Text key={i} style={[styles.previewIngr, { color: colors.text2 }]}>• {ing}</Text>
+                    <Text key={i} style={[styles.previewIngr, { color: colors.text2 }]}>• {scaleIngredient(ing, householdSize)}</Text>
                   ))}
                 </View>
               )}

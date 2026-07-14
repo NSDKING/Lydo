@@ -19,6 +19,8 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
     dietary_restrictions text default '',
     updated_at timestamptz default now()
   );
+  -- household-size scaling (dano Pro feature):
+  -- alter table public.user_profiles add column household_size integer default 1;
   alter table public.user_profiles enable row level security;
   create policy "manage own profile" on public.user_profiles
     for all using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
@@ -37,6 +39,8 @@ export interface UserProfile {
   dietary_restrictions: string;
   // TODO: add column to supabase: alter table public.user_profiles add column kitchen_equipment text default '';
   kitchen_equipment: string;
+  // Number of people to scale shopping-list ingredient quantities for (dano Pro only).
+  household_size: number;
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
@@ -51,6 +55,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   preferences: '',
   dietary_restrictions: '',
   kitchen_equipment: '',
+  household_size: 1,
 };
 
 interface ProfileContextValue {
@@ -98,6 +103,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
             weekly_budget_eur: data.weekly_budget_eur ?? 80,
             preferences: data.preferences ?? '',
             dietary_restrictions: data.dietary_restrictions ?? '',
+            kitchen_equipment: data.kitchen_equipment ?? '',
+            household_size: data.household_size ?? 1,
           });
         }
       } catch { /* table may not exist yet */ }

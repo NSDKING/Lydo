@@ -253,13 +253,30 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
       // Free tier: Day-1 teaser only (Haiku) — never spend a Sonnet week on a non-payer.
       // The full plan generates automatically once isPremium flips true (see effect below).
+      // Cached under a namespaced key (distinct from the full-plan weekKey row) so
+      // reopening the app doesn't fire a fresh Haiku call every time.
       if (!isPremiumRef.current) {
+        const teaserKey = `${weekKey}-teaser-${TODAY}`;
+
+        if (!forceRegenerate) {
+          const cachedTeaser = await fetchWeeklyPlan(teaserKey);
+          if (cachedTeaser) {
+            setPlan(cachedTeaser);
+            setPlanExistsInDB(false);
+            setLoggedMeals({});
+            setLockedMeals({});
+            setMealOverrides({});
+            return;
+          }
+        }
+
         const p = profileRef.current;
         const teaser = await generateMenuTeaser({
           targetCalories: p.daily_calories,
           preferences: p.preferences || undefined,
           dietaryRestrictions: p.dietary_restrictions || undefined,
           teaserDay: TODAY,
+          userId,
         });
         setPlan(teaser);
         setPlanExistsInDB(false);
@@ -293,6 +310,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         .map(([name]) => name);
 
       const p = profileRef.current;
+      const ratingsSummary = buildRatingsSummary(planRef.current, mealRatingsRef.current, mealOverridesRef.current);
 
       const fresh = await generateMenuPlan({
         days: 7,
@@ -304,6 +322,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         weeklyBudget: p.weekly_budget_eur,
         pantryItems,
         kitchenAppliances,
+        mealRatingsSummary: ratingsSummary,
       });
       setPlan(fresh);
       setPlanExistsInDB(true);

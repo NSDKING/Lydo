@@ -4,6 +4,8 @@ import { useLang } from '@/context/LangContext';
 import { DEFAULT_PROFILE, useProfile, UserProfile } from '@/context/ProfileContext';
 import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePremiumGate } from '@/hooks/usePremiumGate';
+import { calcRecommendedCalories, calcTDEE } from '@/utils/tdee';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -36,19 +38,12 @@ const APPLIANCES_KEY = 'lydo_kitchen_appliances';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const ACTIVITY_MULTIPLIERS = {
-  sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
-};
-const GOAL_DELTA = { lose: -500, maintain: 0, gain: 300 };
-
 function calcStats(p: UserProfile) {
   if (!p.height_cm || !p.weight_kg || !p.age) return null;
   const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
-  // Mifflin-St Jeor (gender-neutral midpoint)
-  const bmr = 10 * p.weight_kg + 6.25 * p.height_cm - 5 * p.age - 78;
-  const tdee = bmr * ACTIVITY_MULTIPLIERS[p.activity_level];
-  const recommended = Math.round(tdee + GOAL_DELTA[p.goal]);
-  return { bmi: Math.round(bmi * 10) / 10, tdee: Math.round(tdee), recommended };
+  const tdee = calcTDEE(p);
+  const recommended = calcRecommendedCalories(p);
+  return { bmi: Math.round(bmi * 10) / 10, tdee, recommended };
 }
 
 function bmiCategory(bmi: number): { label: string; color: string } {
@@ -121,6 +116,7 @@ export default function ProfileScreen() {
   const { t, lang, langPref, setLang } = useLang();
   const { profile, saving, saveProfile } = useProfile();
   const { isPremium } = usePurchases();
+  const { requirePremium } = usePremiumGate();
   const router = useRouter();
 
   const [draft, setDraft] = useState<UserProfile>(profile);
@@ -204,6 +200,13 @@ export default function ProfileScreen() {
   };
 
   const num = (v: number | null) => (v == null ? '' : String(v));
+
+  const updateHouseholdSize = (delta: number) => {
+    requirePremium(() => {
+      setDraft(prev => ({ ...prev, household_size: Math.min(8, Math.max(1, prev.household_size + delta)) }));
+      setSaved(false);
+    });
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -335,6 +338,36 @@ export default function ProfileScreen() {
               keyboard="decimal-pad"
               colors={colors}
             />
+          </View>
+
+          {/* Household size */}
+          <SectionHeader title={t('profileHousehold')} colors={colors} />
+          <Text style={[styles.sectionHint, { color: colors.text3 }]}>{t('profileHouseholdHint')}</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.applianceRow, { borderBottomWidth: 0 }]}>
+              <Text style={[styles.applianceName, { color: colors.text }]}>
+                {isPremium ? draft.household_size : 1} {t('profileHouseholdPeople')}
+              </Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, { backgroundColor: draft.household_size > 1 ? colors.surface3 : colors.surface2, borderColor: colors.border }]}
+                  onPress={() => updateHouseholdSize(-1)}
+                  disabled={!isPremium || draft.household_size <= 1}
+                >
+                  <Text style={[styles.stepperBtnText, { color: draft.household_size > 1 ? colors.text : colors.text3 }]}>−</Text>
+                </TouchableOpacity>
+                <Text style={[styles.stepperCount, { color: colors.lime }]}>
+                  {isPremium ? draft.household_size : 1}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, { backgroundColor: colors.surface3, borderColor: colors.border }]}
+                  onPress={() => updateHouseholdSize(1)}
+                  disabled={isPremium && draft.household_size >= 8}
+                >
+                  <Text style={[styles.stepperBtnText, { color: colors.lime }]}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
           {/* Kitchen Appliances */}

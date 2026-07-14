@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
+import { useProfile } from '@/context/ProfileContext';
 import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -13,6 +14,7 @@ import {
   TiktokRecipe,
   UserRecipe,
 } from '@/services/api';
+import { scaleIngredient } from '@/utils/ingredientScale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -57,6 +59,8 @@ export default function RecipesScreen() {
   const { t, lang } = useLang();
   const { plan, isLoading: planLoading, addTiktokMeal } = useMenu();
   const { isPremium } = usePurchases();
+  const { profile } = useProfile();
+  const householdSize = isPremium ? profile.household_size : 1;
   const router = useRouter();
 
   // ── Free-tier import limit ──────────────────────────────────────────────────
@@ -396,7 +400,7 @@ export default function RecipesScreen() {
                       {recipe.ingredients.map((ing, i) => (
                         <View key={i} style={styles.ingredientRow}>
                           <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
-                          <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                          <Text style={[styles.ingredientText, { color: colors.text2 }]}>{scaleIngredient(ing, householdSize)}</Text>
                         </View>
                       ))}
 
@@ -649,7 +653,7 @@ export default function RecipesScreen() {
                         {recipe.ingredients.map((ing, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.lime }]} />
-                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{scaleIngredient(ing, householdSize)}</Text>
                           </View>
                         ))}
                       </>
@@ -772,7 +776,7 @@ export default function RecipesScreen() {
                         {meal.ingredients.map((ing, i) => (
                           <View key={i} style={styles.ingredientRow}>
                             <View style={[styles.ingredientDot, { backgroundColor: colors.surface3 }]} />
-                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{ing}</Text>
+                            <Text style={[styles.ingredientText, { color: colors.text2 }]}>{scaleIngredient(ing, householdSize)}</Text>
                           </View>
                         ))}
                       </>

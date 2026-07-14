@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { DEFAULT_PROFILE, UserProfile } from '@/context/ProfileContext';
 import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
+import { calcTDEE, calcRecommendedCalories } from '@/utils/tdee';
 
 const C = Colors.dark;
 
@@ -17,18 +18,7 @@ type StepId = 'welcome' | 'auth' | 'personal' | 'body' | 'goal' | 'deficit' | 'a
 const STEPS: StepId[] = ['welcome', 'auth', 'personal', 'body', 'goal', 'deficit', 'activity', 'nutrition', 'budget', 'kitchen', 'done'];
 const TOTAL_PROGRESS = STEPS.length - 2; // 8: auth → budget
 
-function calcTDEE(p: UserProfile): number {
-  if (!p.weight_kg || !p.height_cm || !p.age) return 2000;
-  const bmr = 10 * p.weight_kg + 6.25 * p.height_cm - 5 * p.age + 5;
-  const mult = ({ sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 } as Record<string, number>)[p.activity_level] ?? 1.55;
-  return Math.round(bmr * mult);
-}
-
-function calcRecommended(p: UserProfile, deficitKcal: number): number {
-  const tdee = calcTDEE(p);
-  const delta = p.goal === 'gain' ? 300 : p.goal === 'lose' ? -deficitKcal : 0;
-  return tdee + delta;
-}
+const calcRecommended = calcRecommendedCalories;
 
 function calcMacros(calories: number, goal: UserProfile['goal']) {
   const proteinRatio = goal === 'lose' ? 0.35 : goal === 'gain' ? 0.3 : 0.3;

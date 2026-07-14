@@ -2,9 +2,11 @@ import { Colors } from '@/constants/theme';
 import { useLang } from '@/context/LangContext';
 import { useProfile } from '@/context/ProfileContext';
 import { useMenu } from '@/context/MenuContext';
+import { usePurchases } from '@/context/PurchasesContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { LidlPromoDetail, fetchLidlCatalog, getWeekKey } from '@/services/api';
+import { scaleIngredient } from '@/utils/ingredientScale';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -102,7 +104,11 @@ export default function ShopScreen() {
   const { t } = useLang();
   const { plan, isLoading: planLoading } = useMenu();
   const { profile } = useProfile();
-  const budget = profile.weekly_budget_eur;
+  const { isPremium } = usePurchases();
+  // household_size only takes effect for dano Pro — a lapsed subscription
+  // falls back to 1 even if the stored value is still >1.
+  const householdSize = isPremium ? profile.household_size : 1;
+  const budget = profile.weekly_budget_eur * householdSize;
 
   const [checked, setChecked]       = useState<Set<string>>(new Set());
   const [pantry, setPantry]         = useState<Set<string>>(new Set()); // item names
@@ -235,7 +241,7 @@ export default function ShopScreen() {
           if (m?.title && addedCatalogTitles.has(m.title.toLowerCase())) continue;
           oSeen.add(k);
           items.push({
-            id: `o-${k}`, name: ing, isLidl: false, aisle: getAisle(ing),
+            id: `o-${k}`, name: scaleIngredient(ing, householdSize), isLidl: false, aisle: getAisle(ing),
             price: m?.price, old_price: m?.old_price,
             discount_percent: m?.discount_percent, image_url: m?.image_url,
             lidlDeal: !!m, mealCount: mealCounts.get(`o-${k}`) ?? 1,
@@ -248,7 +254,7 @@ export default function ShopScreen() {
     for (const item of items) map.get(item.aisle)!.push(item);
     for (const [l, list] of map) if (!list.length) map.delete(l);
     return map;
-  }, [plan, catalog]);
+  }, [plan, catalog, householdSize]);
 
   const allItems      = useMemo(() => [...aisleMap.values()].flat(), [aisleMap]);
   const doneCount     = allItems.filter(i => checked.has(i.id)).length;
@@ -259,7 +265,7 @@ export default function ShopScreen() {
     if (!i.price || !i.old_price) return s;
     const c = parseFloat(i.price), o = parseFloat(i.old_price);
     return !isNaN(c) && !isNaN(o) ? s + (o - c) : s;
-  }, 0), [allItems]);
+  }, 0) * householdSize, [allItems, householdSize]);
 
   // Items the user still needs to buy (not in pantry)
   const toBuyItems    = useMemo(() => allItems.filter(i => !pantry.has(i.name)), [allItems, pantry]);
@@ -271,14 +277,14 @@ export default function ShopScreen() {
     if (!i.isLidl || !i.price) return s;
     const v = parseFloat(i.price);
     return isNaN(v) ? s : s + v;
-  }, 0), [toBuyItems]);
+  }, 0) * householdSize, [toBuyItems, householdSize]);
 
   // Running bill: only Lidl items being ticked (same scope as estimatedCost)
   const checkedTotal  = useMemo(() => allItems.reduce((s, i) => {
     if (!i.isLidl || !checked.has(i.id) || !i.price || pantry.has(i.name)) return s;
     const v = parseFloat(i.price);
     return isNaN(v) ? s : s + v;
-  }, 0), [allItems, checked, pantry]);
+  }, 0) * householdSize, [allItems, checked, pantry, householdSize]);
 
   const budgetPct     = budget > 0 ? Math.min(100, (estimatedCost / budget) * 100) : 0;
   const overBudget    = budget > 0 && estimatedCost > budget;
