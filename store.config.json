@@ -1,0 +1,75 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0",
+    "copyright": "© 2026 Dimitri Nzeulie",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "en-US": {
+        "description": "Dano is your smart meal planner and calorie tracker — powered by AI to make eating well effortless.\n\nPlan your week in seconds: tell Dano your goals, dietary preferences, and schedule, and it generates a personalised meal plan with shopping list included. No more staring at the fridge wondering what to cook.\n\nFEATURES\n• AI-generated weekly meal plans tailored to your calorie and macro targets\n• Calorie and nutrition tracking with a searchable food database\n• Import recipes instantly from TikTok and social media links\n• Save and organise your favourite recipes\n• Progress tracking to keep you on course toward your goals\n• Supports a wide range of diets: high-protein, vegetarian, vegan, low-carb, and more\n\nWhether you're trying to lose weight, build muscle, or simply eat better, Dano takes the guesswork out of meal planning so you can focus on living well.\n\nDano Pro unlocks unlimited meal plan generation, advanced tracking, and premium features with a 7-day free trial.\n",
+        "keywords": [
+          "meal planner",
+          "calorie tracker",
+          "diet plan",
+          "nutrition",
+          "macro tracker",
+          "food diary",
+          "weight loss",
+          "recipe"
+        ],
+        "supportUrl": "https://lydobackend-production.up.railway.app/support",
+        "title": "Dano – Meal Planner",
+        "privacyPolicyUrl": "https://lydobackend-production.up.railway.app/legal/privacy",
+        "screenshots": {
+          "APP_IPHONE_65": [
+            "store\\apple\\screenshot\\en-US\\APP_IPHONE_65\\1-hero-savings.png",
+            "store\\apple\\screenshot\\en-US\\APP_IPHONE_65\\2-tiktok-import.png",
+            "store\\apple\\screenshot\\en-US\\APP_IPHONE_65\\3-macros.png",
+            "store\\apple\\screenshot\\en-US\\APP_IPHONE_65\\5-shopping-list.png"
+          ]
+        }
+      }
+    },
+    "categories": [
+      "HEALTH_AND_FITNESS"
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Dimitri",
+      "lastName": "Nzeulie",
+      "email": "dimisiet@gmail.com",
+      "phone": "+330745686349",
+      "demoRequired": false
+    }
+  }
+}
