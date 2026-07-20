@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePremiumGate } from '@/hooks/usePremiumGate';
 import { calcRecommendedCalories, calcTDEE } from '@/utils/tdee';
 import { supabase } from '@/lib/supabase';
+import { deleteAccount } from '@/services/api';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -193,6 +194,29 @@ export default function ProfileScreen() {
               await supabase.from('user_profiles').delete().eq('user_id', user.id);
             }
             await supabase.auth.signOut();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      t('profileDeleteAccountTitle'),
+      t('profileDeleteAccountMsg'),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('profileDeleteAccountBtn'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) await deleteAccount(user.id);
+              await supabase.auth.signOut();
+            } catch {
+              Alert.alert(t('profileDeleteAccountError'));
+            }
           },
         },
       ],
@@ -446,8 +470,14 @@ export default function ProfileScreen() {
             >
               <Text style={[styles.accountBtnText, { color: colors.text2 }]}>{t('profileSignOut')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.accountBtn} onPress={handleResetOnboarding}>
+            <TouchableOpacity
+              style={[styles.accountBtn, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              onPress={handleResetOnboarding}
+            >
               <Text style={[styles.accountBtnText, { color: colors.orange }]}>{t('profileReset')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.accountBtn} onPress={handleDeleteAccount}>
+              <Text style={[styles.accountBtnText, { color: colors.orange }]}>{t('profileDeleteAccount')}</Text>
             </TouchableOpacity>
           </View>
 

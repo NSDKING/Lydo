@@ -155,6 +155,12 @@ export async function clearWeeklyPlan(userId: string): Promise<void> {
   await post('/menu/clear', { userId }, 10_000);
 }
 
+// Permanently deletes the user's Supabase Auth identity and every row they own
+// (profile, plans, ratings, recipes, grocery state, usage counters). Irreversible.
+export async function deleteAccount(userId: string): Promise<void> {
+  await post('/account/delete', { userId }, 15_000);
+}
+
 export async function fetchMealSteps(mealName: string, ingredients: string[], lang = 'en'): Promise<string[]> {
   const data = await post<{ steps: string[] }>('/meal/steps', { mealName, ingredients, lang }, 30_000);
   return data.steps;

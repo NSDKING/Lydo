@@ -13,9 +13,8 @@ import {
 import { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// TODO: add real URLs before App Store submission (Guideline 3.1.2)
-const TERMS_URL = '';
-const PRIVACY_URL = '';
+const TERMS_URL = 'https://lydobackend-production.up.railway.app/legal/terms';
+const PRIVACY_URL = 'https://lydobackend-production.up.railway.app/legal/privacy';
 
 // Exact palette from the HTML mockup
 const M = {
