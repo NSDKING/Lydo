@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { getAverageDailySteps, requestHealthPermissions } from '@/lib/health';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 /*
@@ -62,13 +63,30 @@ interface ProfileContextValue {
   profile: UserProfile;
   saving: boolean;
   saveProfile: (p: UserProfile) => Promise<void>;
+  // Step-derived activity level from Apple Health, offered as a suggestion the user
+  // must explicitly accept — never applied automatically. null until resolved, or if
+  // HealthKit is unavailable/unauthorized/this platform isn't iOS.
+  suggestedActivityLevel: UserProfile['activity_level'] | null;
+  suggestedAvgSteps: number | null;
 }
 
 const ProfileContext = createContext<ProfileContextValue>({
   profile: DEFAULT_PROFILE,
   saving: false,
   saveProfile: async () => {},
+  suggestedActivityLevel: null,
+  suggestedAvgSteps: null,
 });
+
+// Trailing-14-day average steps/day -> activity level band. Thresholds are a
+// starting point, not clinically derived — tune post-launch if needed.
+function activityLevelFromSteps(avgSteps: number): UserProfile['activity_level'] {
+  if (avgSteps < 5000) return 'sedentary';
+  if (avgSteps < 7500) return 'light';
+  if (avgSteps < 10000) return 'moderate';
+  if (avgSteps < 12500) return 'active';
+  return 'very_active';
+}
 
 async function getUserId(): Promise<string | null> {
   try {
@@ -80,6 +98,22 @@ async function getUserId(): Promise<string | null> {
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [saving, setSaving] = useState(false);
+  const [suggestedActivityLevel, setSuggestedActivityLevel] = useState<UserProfile['activity_level'] | null>(null);
+  const [suggestedAvgSteps, setSuggestedAvgSteps] = useState<number | null>(null);
+
+  // Ask for HealthKit permission once on mount; if granted, derive a suggested
+  // activity level from recent steps. Never touches `profile`/`daily_calories`
+  // directly — see the accept action in the Profile screen.
+  useEffect(() => {
+    (async () => {
+      const granted = await requestHealthPermissions();
+      if (!granted) return;
+      const avgSteps = await getAverageDailySteps(14);
+      if (avgSteps == null) return;
+      setSuggestedAvgSteps(avgSteps);
+      setSuggestedActivityLevel(activityLevelFromSteps(avgSteps));
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -128,7 +162,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ProfileContext.Provider value={{ profile, saving, saveProfile }}>
+    <ProfileContext.Provider value={{ profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps }}>
       {children}
     </ProfileContext.Provider>
   );

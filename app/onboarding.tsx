@@ -52,6 +52,8 @@ export default function Onboarding() {
   const [draft, setDraft] = useState<UserProfile>(DEFAULT_PROFILE);
   const [deficitKcal, setDeficitKcal] = useState(500);
   const [customDeficit, setCustomDeficit] = useState('');
+  const [isCustomDeficit, setIsCustomDeficit] = useState(false);
+  const [dailyCalText, setDailyCalText] = useState(String(DEFAULT_PROFILE.daily_calories));
   const step = STEPS[idx];
   const isProgressStep = step !== 'welcome' && step !== 'done';
   const progressIdx = idx - 1; // auth=0, personal=1, ..., budget=6
@@ -75,6 +77,7 @@ export default function Onboarding() {
     if (step === 'activity') {
       const rec = calcRecommended(draft, deficitKcal);
       setDraft(p => ({ ...p, daily_calories: rec }));
+      setDailyCalText(String(rec));
     }
     setIdx(i => i + 1);
   };
@@ -264,28 +267,28 @@ export default function Onboarding() {
               ).map(opt => (
                 <TouchableOpacity
                   key={opt.kcal}
-                  style={[s.optCard, deficitKcal === opt.kcal && customDeficit === '' && s.optCardActive]}
-                  onPress={() => { setDeficitKcal(opt.kcal); setCustomDeficit(''); }}
+                  style={[s.optCard, deficitKcal === opt.kcal && !isCustomDeficit && s.optCardActive]}
+                  onPress={() => { setDeficitKcal(opt.kcal); setCustomDeficit(''); setIsCustomDeficit(false); }}
                 >
-                  <Text style={[s.optLabel, deficitKcal === opt.kcal && customDeficit === '' && s.optLabelActive]}>{opt.label}</Text>
+                  <Text style={[s.optLabel, deficitKcal === opt.kcal && !isCustomDeficit && s.optLabelActive]}>{opt.label}</Text>
                   <Text style={s.optDesc}>{opt.desc}</Text>
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                style={[s.optCard, customDeficit !== '' && s.optCardActive]}
-                onPress={() => { if (customDeficit === '') setCustomDeficit('400'); }}
+                style={[s.optCard, isCustomDeficit && s.optCardActive]}
+                onPress={() => { setIsCustomDeficit(true); if (customDeficit === '') setCustomDeficit('400'); }}
               >
-                <Text style={[s.optLabel, customDeficit !== '' && s.optLabelActive]}>{t('custom')}</Text>
+                <Text style={[s.optLabel, isCustomDeficit && s.optLabelActive]}>{t('custom')}</Text>
                 <Text style={s.optDesc}>{t('ob_defCustomDesc')}</Text>
               </TouchableOpacity>
-              {customDeficit !== '' && (
+              {isCustomDeficit && (
                 <Field
                   label={t('ob_defMyLabel')}
                   value={customDeficit}
                   onChangeText={v => {
                     setCustomDeficit(v);
-                    const n = parseInt(v);
-                    if (n > 0) setDeficitKcal(n);
+                    const n = parseInt(v, 10);
+                    if (v !== '' && !isNaN(n) && n > 0) setDeficitKcal(n);
                   }}
                   keyboardType="number-pad"
                 />
@@ -333,8 +336,12 @@ export default function Onboarding() {
               ) : null}
               <Field
                 label={t('ob_dailyCal')}
-                value={draft.daily_calories.toString()}
-                onChangeText={v => upd({ daily_calories: v ? (parseInt(v) || 2000) : 2000 })}
+                value={dailyCalText}
+                onChangeText={v => {
+                  setDailyCalText(v);
+                  const n = parseInt(v, 10);
+                  if (v !== '' && !isNaN(n) && n > 0) upd({ daily_calories: n });
+                }}
                 keyboardType="number-pad"
               />
               <Field

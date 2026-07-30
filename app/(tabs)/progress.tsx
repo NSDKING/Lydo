@@ -54,6 +54,14 @@ function bmiCategory(bmi: number): { label: string; color: string } {
   return { label: 'Obese', color: '#ff4757' };
 }
 
+const ACTIVITY_LEVEL_KEYS = {
+  sedentary: 'profileSedentary',
+  light: 'profileLight',
+  moderate: 'profileModerate',
+  active: 'profileActive',
+  very_active: 'profileVeryActive',
+} as const satisfies Record<UserProfile['activity_level'], string>;
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionHeader({ title, colors }: { title: string; colors: any }) {
@@ -115,7 +123,7 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang, langPref, setLang } = useLang();
-  const { profile, saving, saveProfile } = useProfile();
+  const { profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps } = useProfile();
   const { isPremium } = usePurchases();
   const { requirePremium } = usePremiumGate();
   const router = useRouter();
@@ -123,6 +131,7 @@ export default function ProfileScreen() {
   const [draft, setDraft] = useState<UserProfile>(profile);
   const [saved, setSaved] = useState(false);
   const [applianceCounts, setApplianceCounts] = useState<Record<string, number>>({});
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
 
   useEffect(() => { setDraft(profile); }, [profile]);
 
@@ -232,6 +241,28 @@ export default function ProfileScreen() {
     });
   };
 
+  // Only ever suggest going *more* active — a single low-step day/injury shouldn't
+  // nudge someone toward a lower calorie target. Accepting recalculates daily_calories
+  // via the same shared TDEE helper the stats card and onboarding both use.
+  const ACTIVITY_ORDER: UserProfile['activity_level'][] = ['sedentary', 'light', 'moderate', 'active', 'very_active'];
+  const showActivitySuggestion =
+    !suggestionDismissed &&
+    suggestedActivityLevel != null &&
+    suggestedAvgSteps != null &&
+    ACTIVITY_ORDER.indexOf(suggestedActivityLevel) > ACTIVITY_ORDER.indexOf(profile.activity_level);
+
+  const acceptActivitySuggestion = async () => {
+    if (!suggestedActivityLevel) return;
+    const updated: UserProfile = {
+      ...profile,
+      activity_level: suggestedActivityLevel,
+      daily_calories: calcRecommendedCalories({ ...profile, activity_level: suggestedActivityLevel }),
+    };
+    setDraft(updated);
+    await saveProfile(updated);
+    setSuggestionDismissed(true);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -319,6 +350,27 @@ export default function ProfileScreen() {
               ]}
             />
           </View>
+
+          {showActivitySuggestion && suggestedActivityLevel && (
+            <View style={[styles.suggestionBanner, { backgroundColor: colors.limeDim, borderColor: 'rgba(181,242,61,0.3)' }]}>
+              <Text style={[styles.suggestionText, { color: colors.text2 }]}>
+                {t('profileActivitySuggestion')
+                  .replace('{steps}', String(suggestedAvgSteps))
+                  .replace('{level}', t(ACTIVITY_LEVEL_KEYS[suggestedActivityLevel]))}
+              </Text>
+              <View style={styles.suggestionActions}>
+                <TouchableOpacity onPress={() => setSuggestionDismissed(true)}>
+                  <Text style={[styles.suggestionDismiss, { color: colors.text3 }]}>{t('profileActivitySuggestionDismiss')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.suggestionAcceptBtn, { backgroundColor: colors.lime }]}
+                  onPress={acceptActivitySuggestion}
+                >
+                  <Text style={[styles.suggestionAcceptText, { color: colors.background }]}>{t('profileActivitySuggestionAccept')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Nutrition */}
           <SectionHeader title={t('profileNutrition')} colors={colors} />
@@ -521,6 +573,12 @@ const styles = StyleSheet.create({
   accountBtn: { paddingVertical: 16, paddingHorizontal: 18 },
   accountBtnText: { fontSize: 15, fontWeight: '600' },
   sectionHint: { fontSize: 11, marginHorizontal: 24, marginTop: -4, marginBottom: 8 },
+  suggestionBanner: { marginHorizontal: 16, marginTop: 10, borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
+  suggestionText: { fontSize: 13, lineHeight: 19 },
+  suggestionActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 16 },
+  suggestionDismiss: { fontSize: 13, fontWeight: '600' },
+  suggestionAcceptBtn: { borderRadius: 12, paddingVertical: 8, paddingHorizontal: 16 },
+  suggestionAcceptText: { fontSize: 13, fontWeight: '700' },
   applianceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4 },
   applianceName: { flex: 1, fontSize: 15 },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -14,6 +14,7 @@ import {
   swapMeal as apiSwapMeal,
 } from '@/services/api';
 import { supabase } from '@/lib/supabase';
+import { writeDietaryEnergy } from '@/lib/health';
 import { useProfile } from '@/context/ProfileContext';
 import { usePurchases } from '@/context/PurchasesContext';
 
@@ -407,7 +408,17 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const logMeal = useCallback((day: DayKey, idx: number) => {
     setLoggedMeals(prev => {
       const s = new Set(prev[day] ?? []);
-      s.has(idx) ? s.delete(idx) : s.add(idx);
+      const wasLogged = s.has(idx);
+      wasLogged ? s.delete(idx) : s.add(idx);
+      // Only write on the unlogged -> logged transition — never on unlog (see
+      // lib/health.ts's documented "no delete-on-unlog" limitation for v1).
+      if (!wasLogged) {
+        const meal = planRef.current?.days.find(d => d.day === day)?.meals[idx];
+        if (meal) {
+          const calories = mealOverridesRef.current[day]?.[idx]?.calories ?? meal.calories;
+          writeDietaryEnergy(calories, new Date()).catch(() => {});
+        }
+      }
       return { ...prev, [day]: new Set(s) };
     });
   }, []);
