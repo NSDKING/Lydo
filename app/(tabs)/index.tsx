@@ -2,7 +2,7 @@ import { AddFoodModal } from '@/components/AddFoodModal';
 import { Colors } from '@/constants/theme';
 import { DAY_FULL } from '@/constants/i18n';
 import { useLang } from '@/context/LangContext';
-import { useMenu } from '@/context/MenuContext';
+import { ExtraMeal, useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AdaptedIngredient, adaptRecipeWithLidl, fetchMealSteps, Meal, saveUserRecipe } from '@/services/api';
 import React, { useState } from 'react';
@@ -124,6 +124,7 @@ export default function TodayScreen() {
   const [stepsCache, setStepsCache] = useState<Record<string, string[]>>({});
   const [stepsLoadingName, setStepsLoadingName] = useState<string | null>(null);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
+  const [editingExtraMeal, setEditingExtraMeal] = useState<ExtraMeal | null>(null);
   const [pendingRating, setPendingRating] = useState<{ idx: number; mealName: string } | null>(null);
 
   const openMeal = (meal: Meal) => {
@@ -313,6 +314,12 @@ export default function TodayScreen() {
                     <Text style={[styles.mealKcal, { color: colors.text3 }]}>{item.calories} kcal</Text>
                     <TouchableOpacity
                       style={[styles.mealButton, { backgroundColor: colors.surface3 }]}
+                      onPress={() => setEditingExtraMeal(item)}
+                    >
+                      <Text style={[styles.mealButtonText, { color: colors.text3 }]}>✎</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.mealButton, { backgroundColor: colors.surface3 }]}
                       onPress={() => removeExtraMeal(TODAY, item.id)}
                     >
                       <Text style={[styles.mealButtonText, { color: colors.orange }]}>✕</Text>
@@ -334,7 +341,12 @@ export default function TodayScreen() {
         <Text style={[styles.fabText, { color: colors.background }]}>+</Text>
       </TouchableOpacity>
 
-      <AddFoodModal visible={addFoodOpen} onClose={() => setAddFoodOpen(false)} day={TODAY} />
+      <AddFoodModal
+        visible={addFoodOpen || !!editingExtraMeal}
+        onClose={() => { setAddFoodOpen(false); setEditingExtraMeal(null); }}
+        day={TODAY}
+        editingMeal={editingExtraMeal}
+      />
 
       {/* Rating modal — appears after logging a meal */}
       <RatingModal

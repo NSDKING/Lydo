@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import {
+  deleteObjects,
   isHealthDataAvailable,
   queryQuantitySamples,
   requestAuthorization,
@@ -63,12 +64,25 @@ export async function getAverageDailySteps(days = 14): Promise<number | null> {
 }
 
 // Fire-and-forget — a HealthKit write failure must never affect meal logging.
-// Known limitation (v1): writes on log, does not delete the sample on unlog.
-export async function writeDietaryEnergy(calories: number, date: Date): Promise<void> {
-  if (!authorized) return;
+// Returns the saved sample's uuid (needed to delete/replace it later via
+// deleteDietaryEnergySample), or null if the write didn't happen/failed.
+export async function writeDietaryEnergy(calories: number, date: Date): Promise<string | null> {
+  if (!authorized) return null;
   try {
-    await saveQuantitySample(DIETARY_ENERGY, 'kcal', calories, date, date);
+    const sample = await saveQuantitySample(DIETARY_ENERGY, 'kcal', calories, date, date);
+    return sample?.uuid ?? null;
   } catch (e) {
     console.warn('[health] writeDietaryEnergy failed', e);
+    return null;
+  }
+}
+
+// Fire-and-forget — used to keep Apple Health in sync when a logged meal is edited/deleted.
+export async function deleteDietaryEnergySample(uuid: string): Promise<void> {
+  if (!authorized) return;
+  try {
+    await deleteObjects(DIETARY_ENERGY, { uuid });
+  } catch (e) {
+    console.warn('[health] deleteDietaryEnergySample failed', e);
   }
 }

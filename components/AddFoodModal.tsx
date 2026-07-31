@@ -1,5 +1,5 @@
 import { Colors } from '@/constants/theme';
-import { useMenu } from '@/context/MenuContext';
+import { ExtraMeal, useMenu } from '@/context/MenuContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { scanFoodWithAI, fetchUserRecipes, UserRecipe } from '@/services/api';
 import { CameraView, BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
@@ -53,10 +53,11 @@ async function fetchOpenFoodFacts(barcode: string): Promise<{ name: string; per1
   } catch { return null; }
 }
 
-export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onClose: () => void; day: string }) {
+export function AddFoodModal({ visible, onClose, day, editingMeal }: { visible: boolean; onClose: () => void; day: string; editingMeal?: ExtraMeal | null }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
-  const { addExtraMeal } = useMenu();
+  const { addExtraMeal, editExtraMeal } = useMenu();
+  const isEditing = !!editingMeal;
 
   const [mode, setMode] = useState<SheetMode>('select');
   const [loading, setLoading] = useState(false);
@@ -98,7 +99,23 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
 
   const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
 
+  // Pre-fill the manual-entry form when opened to edit an existing extra meal.
+  useEffect(() => {
+    if (!visible || !editingMeal) return;
+    setMode('manual');
+    setMName(editingMeal.name);
+    setMCal(String(editingMeal.calories));
+    setMProtein(String(editingMeal.protein_g));
+    setMCarbs(String(editingMeal.carbs_g));
+    setMFat(String(editingMeal.fat_g));
+  }, [visible, editingMeal]);
+
   const goBack = useCallback(() => {
+    if (isEditing) {
+      handleClose();
+      return;
+    }
+
     if (mode === 'recipe-portion') {
       setMode('my-recipes');
       return;
@@ -114,7 +131,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
     setScanned(false);
     setPer100g(null);
     setResult(null);
-  }, [mode, selectedRecipe]);
+  }, [mode, selectedRecipe, isEditing, handleClose]);
 
   const ensureCameraPermission = useCallback(async (next: SheetMode) => {
     if (!permission?.granted) await requestPermission();
@@ -197,9 +214,13 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
 
   const handleAdd = useCallback(() => {
     if (!result) return;
-    addExtraMeal(day, result);
+    if (editingMeal) {
+      editExtraMeal(day, editingMeal.id, result);
+    } else {
+      addExtraMeal(day, result);
+    }
     handleClose();
-  }, [result, day, addExtraMeal, handleClose]);
+  }, [result, day, addExtraMeal, editExtraMeal, editingMeal, handleClose]);
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
@@ -362,7 +383,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
   const renderManual = () => (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.padded} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.title, { color: colors.text }]}>Add manually</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{isEditing ? 'Edit food' : 'Add manually'}</Text>
         {([
           { label: 'Food name *', value: mName, set: setMName, kb: 'default' as const },
           { label: 'Calories *', value: mCal, set: setMCal, kb: 'numeric' as const },
@@ -539,7 +560,7 @@ export function AddFoodModal({ visible, onClose, day }: { visible: boolean; onCl
           <Text style={[styles.sourceText, { color: colors.text3 }]}>{sourceLabel}</Text>
         </View>
         <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.lime }]} onPress={handleAdd}>
-          <Text style={[styles.addBtnText, { color: colors.background }]}>Add to Today</Text>
+          <Text style={[styles.addBtnText, { color: colors.background }]}>{isEditing ? 'Save Changes' : 'Add to Today'}</Text>
         </TouchableOpacity>
         <View style={{ height: 32 }} />
       </ScrollView>

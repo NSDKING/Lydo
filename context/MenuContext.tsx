@@ -14,7 +14,7 @@ import {
   swapMeal as apiSwapMeal,
 } from '@/services/api';
 import { supabase } from '@/lib/supabase';
-import { writeDietaryEnergy } from '@/lib/health';
+import { deleteDietaryEnergySample, writeDietaryEnergy } from '@/lib/health';
 import { useProfile } from '@/context/ProfileContext';
 import { usePurchases } from '@/context/PurchasesContext';
 
@@ -25,8 +25,23 @@ const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 type DayKey = string; // "Monday", "Tuesday", …
 type MealOverrides = Record<DayKey, Record<number, Partial<Meal>>>;
 
+// The app only ever shows the plan for the current real-world week, so a weekday
+// name (DayKey) maps 1:1 to a calendar date within it — needed to persist logs
+// against an actual date rather than an ambiguous "Monday" that recurs every week.
+const WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function dateKeyForDay(day: DayKey): string {
+  const targetIdx = WEEKDAY_ORDER.indexOf(day);
+  const now = new Date();
+  const currentIdx = (now.getDay() + 6) % 7; // Mon=0..Sun=6
+  const d = new Date(now);
+  d.setDate(d.getDate() + (targetIdx - currentIdx));
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
 export interface ExtraMeal {
   id: string;
+  healthkitUuid?: string;
   name: string;
   calories: number;
   protein_g: number;
@@ -71,7 +86,8 @@ interface MenuContextValue {
   applyMealOverride: (day: DayKey, idx: number, meal: Meal) => void;
   // extra meals logged outside the plan
   extraMeals: Record<DayKey, ExtraMeal[]>;
-  addExtraMeal: (day: DayKey, meal: Omit<ExtraMeal, 'id'>) => void;
+  addExtraMeal: (day: DayKey, meal: Omit<ExtraMeal, 'id' | 'healthkitUuid'>) => void;
+  editExtraMeal: (day: DayKey, id: string, meal: Omit<ExtraMeal, 'id' | 'healthkitUuid'>) => void;
   removeExtraMeal: (day: DayKey, id: string) => void;
   // persist current plan (with overrides) to Supabase
   persistCurrentPlan: () => Promise<void>;
@@ -91,7 +107,7 @@ const MenuContext = createContext<MenuContextValue>({
   swappingMeal: null, swapMeal: async () => {},
   addTiktokMeal: () => {},
   applyMealOverride: () => {},
-  extraMeals: {}, addExtraMeal: () => {}, removeExtraMeal: () => {},
+  extraMeals: {}, addExtraMeal: () => {}, editExtraMeal: () => {}, removeExtraMeal: () => {},
   persistCurrentPlan: async () => {},
   getEffectiveDayPlan: () => null,
 });
@@ -171,6 +187,9 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [planExistsInDB, setPlanExistsInDB] = useState(false);
   const [loggedMeals, setLoggedMeals] = useState<Record<DayKey, Set<number>>>({});
+  // healthkit_uuid of the Apple Health sample written for each logged plan-meal slot —
+  // needed to delete the right sample again on unlog. Not exposed via context value.
+  const [loggedMealHealthkitIds, setLoggedMealHealthkitIds] = useState<Record<DayKey, Record<number, string>>>({});
   const [lockedMeals, setLockedMeals] = useState<Record<DayKey, Set<number>>>({});
   const [mealOverrides, setMealOverrides] = useState<MealOverrides>({});
   const [swappingMeal, setSwappingMeal] = useState<{ day: DayKey; idx: number } | null>(null);
@@ -195,6 +214,12 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   const mealOverridesRef = useRef(mealOverrides);
   useEffect(() => { mealOverridesRef.current = mealOverrides; }, [mealOverrides]);
+
+  const loggedMealHealthkitIdsRef = useRef(loggedMealHealthkitIds);
+  useEffect(() => { loggedMealHealthkitIdsRef.current = loggedMealHealthkitIds; }, [loggedMealHealthkitIds]);
+
+  const extraMealsRef = useRef(extraMeals);
+  useEffect(() => { extraMealsRef.current = extraMeals; }, [extraMeals]);
 
   const didInitialLoad = useRef(false);
 
@@ -241,6 +266,74 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // Load persisted logged meals (plan-meal toggles + extra items) for the current
+  // week so they survive app restarts — see supabase/migrations/*_create_logged_meals.sql.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const dayForDate: Record<string, DayKey> = {};
+        WEEKDAY_ORDER.forEach(d => { dayForDate[dateKeyForDay(d)] = d; });
+        const { data } = await supabase
+          .from('logged_meals')
+          .select('id, logged_date, kind, plan_day, plan_meal_index, name, calories, protein_g, carbs_g, fat_g, fiber_g, meal_source, healthkit_uuid')
+          .eq('user_id', session.user.id)
+          .in('logged_date', Object.keys(dayForDate));
+        if (!data || data.length === 0) return;
+
+        const logged: Record<DayKey, Set<number>> = {};
+        const healthkitIds: Record<DayKey, Record<number, string>> = {};
+        const extras: Record<DayKey, ExtraMeal[]> = {};
+
+        for (const row of data) {
+          if (row.kind === 'plan' && row.plan_day && row.plan_meal_index != null) {
+            const day = row.plan_day as DayKey;
+            (logged[day] ??= new Set()).add(row.plan_meal_index);
+            if (row.healthkit_uuid) (healthkitIds[day] ??= {})[row.plan_meal_index] = row.healthkit_uuid;
+          } else if (row.kind === 'extra') {
+            const day = dayForDate[row.logged_date];
+            if (!day) continue;
+            (extras[day] ??= []).push({
+              id: row.id,
+              healthkitUuid: row.healthkit_uuid ?? undefined,
+              name: row.name,
+              calories: row.calories,
+              protein_g: row.protein_g,
+              carbs_g: row.carbs_g,
+              fat_g: row.fat_g,
+              fiber_g: row.fiber_g ?? undefined,
+              source: row.meal_source,
+            });
+          }
+        }
+
+        if (Object.keys(logged).length > 0) {
+          setLoggedMeals(logged);
+          setLoggedMealHealthkitIds(healthkitIds);
+        }
+        if (Object.keys(extras).length > 0) setExtraMeals(extras);
+      } catch { /* offline — falls back to empty local state */ }
+    })();
+  }, []);
+
+  // Best-effort cleanup of persisted plan-meal-toggle rows when the plan itself is
+  // regenerated (meal indices no longer mean the same thing) — mirrors the local
+  // setLoggedMeals({}) resets in load() below. Never touches HealthKit: those are
+  // real eaten-calorie records independent of which plan the app is recommending.
+  const clearPersistedPlanLogsForWeek = useCallback(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        await supabase.from('logged_meals').delete()
+          .eq('user_id', session.user.id)
+          .eq('kind', 'plan')
+          .in('logged_date', WEEKDAY_ORDER.map(dateKeyForDay));
+      } catch { /* best effort */ }
+    })();
+  }, []);
+
   const load = useCallback(async (forceRegenerate = false) => {
     if (didInitialLoad.current && !forceRegenerate) return;
     didInitialLoad.current = true;
@@ -265,6 +358,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
             setPlan(cachedTeaser);
             setPlanExistsInDB(false);
             setLoggedMeals({});
+            setLoggedMealHealthkitIds({});
+            clearPersistedPlanLogsForWeek();
             setLockedMeals({});
             setMealOverrides({});
             return;
@@ -282,6 +377,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         setPlan(teaser);
         setPlanExistsInDB(false);
         setLoggedMeals({});
+        setLoggedMealHealthkitIds({});
+        clearPersistedPlanLogsForWeek();
         setLockedMeals({});
         setMealOverrides({});
         return;
@@ -328,6 +425,8 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       setPlan(fresh);
       setPlanExistsInDB(true);
       setLoggedMeals({});
+      setLoggedMealHealthkitIds({});
+      clearPersistedPlanLogsForWeek();
       setLockedMeals({});
       setMealOverrides({});
       fresh.days.forEach(day =>
@@ -406,21 +505,66 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   // ── Logging ────────────────────────────────────────────────────────────────
 
   const logMeal = useCallback((day: DayKey, idx: number) => {
+    let wasLogged = false;
     setLoggedMeals(prev => {
       const s = new Set(prev[day] ?? []);
-      const wasLogged = s.has(idx);
+      wasLogged = s.has(idx);
       wasLogged ? s.delete(idx) : s.add(idx);
-      // Only write on the unlogged -> logged transition — never on unlog (see
-      // lib/health.ts's documented "no delete-on-unlog" limitation for v1).
-      if (!wasLogged) {
-        const meal = planRef.current?.days.find(d => d.day === day)?.meals[idx];
-        if (meal) {
-          const calories = mealOverridesRef.current[day]?.[idx]?.calories ?? meal.calories;
-          writeDietaryEnergy(calories, new Date()).catch(() => {});
-        }
-      }
       return { ...prev, [day]: new Set(s) };
     });
+
+    const loggedDate = dateKeyForDay(day);
+
+    if (!wasLogged) {
+      // newly logged -> write to Apple Health + persist a row so it survives restarts
+      const meal = planRef.current?.days.find(d => d.day === day)?.meals[idx];
+      if (!meal) return;
+      const overrides = mealOverridesRef.current[day]?.[idx];
+      const name = overrides?.name ?? meal.name;
+      const calories = overrides?.calories ?? meal.calories;
+      const protein_g = overrides?.protein_g ?? meal.protein_g;
+      const carbs_g = overrides?.carbs_g ?? meal.carbs_g;
+      const fat_g = overrides?.fat_g ?? meal.fat_g;
+      const fiber_g = overrides?.fiber_g ?? meal.fiber_g;
+
+      (async () => {
+        const healthkitUuid = await writeDietaryEnergy(calories, new Date());
+        if (healthkitUuid) {
+          setLoggedMealHealthkitIds(prev => ({ ...prev, [day]: { ...prev[day], [idx]: healthkitUuid } }));
+        }
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return;
+          await supabase.from('logged_meals').upsert(
+            {
+              user_id: session.user.id, logged_date: loggedDate, kind: 'plan',
+              plan_day: day, plan_meal_index: idx,
+              name, calories, protein_g, carbs_g, fat_g, fiber_g: fiber_g ?? null,
+              meal_source: 'plan', healthkit_uuid: healthkitUuid,
+            },
+            { onConflict: 'user_id,logged_date,plan_day,plan_meal_index' },
+          );
+        } catch { /* local toggle still stands, will retry to persist next hydrate */ }
+      })();
+    } else {
+      // unlogged -> delete the persisted row + its Apple Health sample
+      const healthkitUuid = loggedMealHealthkitIdsRef.current[day]?.[idx];
+      setLoggedMealHealthkitIds(prev => {
+        const dayIds = { ...prev[day] };
+        delete dayIds[idx];
+        return { ...prev, [day]: dayIds };
+      });
+      if (healthkitUuid) deleteDietaryEnergySample(healthkitUuid).catch(() => {});
+      (async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return;
+          await supabase.from('logged_meals').delete()
+            .eq('user_id', session.user.id).eq('kind', 'plan')
+            .eq('logged_date', loggedDate).eq('plan_day', day).eq('plan_meal_index', idx);
+        } catch { /* best effort */ }
+      })();
+    }
   }, []);
 
   const getEatenCalories = useCallback((day: DayKey): number => {
@@ -493,13 +637,74 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   // ── Extra meals ────────────────────────────────────────────────────────────
 
-  const addExtraMeal = useCallback((day: DayKey, meal: Omit<ExtraMeal, 'id'>) => {
-    const entry: ExtraMeal = { ...meal, id: `${Date.now()}-${Math.random()}` };
+  const addExtraMeal = useCallback((day: DayKey, meal: Omit<ExtraMeal, 'id' | 'healthkitUuid'>) => {
+    const tempId = `${Date.now()}-${Math.random()}`;
+    const entry: ExtraMeal = { ...meal, id: tempId };
     setExtraMeals(prev => ({ ...prev, [day]: [...(prev[day] ?? []), entry] }));
+
+    (async () => {
+      const healthkitUuid = await writeDietaryEnergy(meal.calories, new Date());
+      let realId = tempId;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data } = await supabase.from('logged_meals').insert({
+            user_id: session.user.id, logged_date: dateKeyForDay(day), kind: 'extra',
+            name: meal.name, calories: meal.calories, protein_g: meal.protein_g,
+            carbs_g: meal.carbs_g, fat_g: meal.fat_g, fiber_g: meal.fiber_g ?? null,
+            meal_source: meal.source, healthkit_uuid: healthkitUuid,
+          }).select('id').single();
+          if (data) realId = data.id;
+        }
+      } catch { /* local entry still stands, just won't persist across restarts */ }
+      setExtraMeals(prev => ({
+        ...prev,
+        [day]: (prev[day] ?? []).map(m => (m.id === tempId ? { ...m, id: realId, healthkitUuid: healthkitUuid ?? undefined } : m)),
+      }));
+    })();
+  }, []);
+
+  const editExtraMeal = useCallback((day: DayKey, id: string, meal: Omit<ExtraMeal, 'id' | 'healthkitUuid'>) => {
+    const prevEntry = (extraMealsRef.current[day] ?? []).find(m => m.id === id);
+    setExtraMeals(prev => ({
+      ...prev,
+      [day]: (prev[day] ?? []).map(m => (m.id === id ? { ...meal, id, healthkitUuid: m.healthkitUuid } : m)),
+    }));
+
+    (async () => {
+      const newHealthkitUuid = await writeDietaryEnergy(meal.calories, new Date());
+      if (prevEntry?.healthkitUuid) deleteDietaryEnergySample(prevEntry.healthkitUuid).catch(() => {});
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await supabase.from('logged_meals').update({
+            name: meal.name, calories: meal.calories, protein_g: meal.protein_g,
+            carbs_g: meal.carbs_g, fat_g: meal.fat_g, fiber_g: meal.fiber_g ?? null,
+            meal_source: meal.source, healthkit_uuid: newHealthkitUuid,
+          }).eq('id', id).eq('user_id', session.user.id);
+        }
+      } catch { /* best effort */ }
+      if (newHealthkitUuid) {
+        setExtraMeals(prev => ({
+          ...prev,
+          [day]: (prev[day] ?? []).map(m => (m.id === id ? { ...m, healthkitUuid: newHealthkitUuid } : m)),
+        }));
+      }
+    })();
   }, []);
 
   const removeExtraMeal = useCallback((day: DayKey, id: string) => {
+    const prevEntry = (extraMealsRef.current[day] ?? []).find(m => m.id === id);
     setExtraMeals(prev => ({ ...prev, [day]: (prev[day] ?? []).filter(m => m.id !== id) }));
+
+    if (prevEntry?.healthkitUuid) deleteDietaryEnergySample(prevEntry.healthkitUuid).catch(() => {});
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        await supabase.from('logged_meals').delete().eq('id', id).eq('user_id', session.user.id);
+      } catch { /* best effort */ }
+    })();
   }, []);
 
   // ── Locking ────────────────────────────────────────────────────────────────
@@ -614,7 +819,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       swappingMeal, swapMeal,
       addTiktokMeal,
       applyMealOverride,
-      extraMeals, addExtraMeal, removeExtraMeal,
+      extraMeals, addExtraMeal, editExtraMeal, removeExtraMeal,
       persistCurrentPlan,
       getEffectiveDayPlan,
     }}>
