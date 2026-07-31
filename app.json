@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",
@@ -22,8 +22,8 @@
       "package": "com.lydo.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#b5f23d",
-        "foregroundImage": "./assets/images/icon.png"
+        "backgroundColor": "#0f0f0f",
+        "foregroundImage": "./assets/images/adaptive-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -50,12 +50,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#080808",
+          "backgroundColor": "#0f0f0f",
           "dark": {
-            "backgroundColor": "#080808"
+            "backgroundColor": "#0f0f0f"
           }
         }
       ],
