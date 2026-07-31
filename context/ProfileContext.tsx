@@ -68,6 +68,9 @@ interface ProfileContextValue {
   // HealthKit is unavailable/unauthorized/this platform isn't iOS.
   suggestedActivityLevel: UserProfile['activity_level'] | null;
   suggestedAvgSteps: number | null;
+  // Surfaced in the Profile screen's "Apple Health" section so the app clearly
+  // identifies its HealthKit usage in the UI (Guideline 2.5.1).
+  healthKitAuthorized: boolean;
 }
 
 const ProfileContext = createContext<ProfileContextValue>({
@@ -76,6 +79,7 @@ const ProfileContext = createContext<ProfileContextValue>({
   saveProfile: async () => {},
   suggestedActivityLevel: null,
   suggestedAvgSteps: null,
+  healthKitAuthorized: false,
 });
 
 // Trailing-14-day average steps/day -> activity level band. Thresholds are a
@@ -100,6 +104,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [suggestedActivityLevel, setSuggestedActivityLevel] = useState<UserProfile['activity_level'] | null>(null);
   const [suggestedAvgSteps, setSuggestedAvgSteps] = useState<number | null>(null);
+  const [healthKitAuthorized, setHealthKitAuthorized] = useState(false);
 
   // Ask for HealthKit permission once on mount; if granted, derive a suggested
   // activity level from recent steps. Never touches `profile`/`daily_calories`
@@ -107,6 +112,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       const granted = await requestHealthPermissions();
+      setHealthKitAuthorized(granted);
       if (!granted) return;
       const avgSteps = await getAverageDailySteps(14);
       if (avgSteps == null) return;
@@ -162,7 +168,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ProfileContext.Provider value={{ profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps }}>
+    <ProfileContext.Provider value={{ profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps, healthKitAuthorized }}>
       {children}
     </ProfileContext.Provider>
   );

@@ -123,7 +123,7 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
   const { t, lang, langPref, setLang } = useLang();
-  const { profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps } = useProfile();
+  const { profile, saving, saveProfile, suggestedActivityLevel, suggestedAvgSteps, healthKitAuthorized } = useProfile();
   const { isPremium } = usePurchases();
   const { requirePremium } = usePremiumGate();
   const router = useRouter();
@@ -349,6 +349,16 @@ export default function ProfileScreen() {
                 { key: 'very_active', label: t('profileVeryActive') },
               ]}
             />
+          </View>
+
+          {/* Apple Health — always visible so the app clearly identifies its HealthKit
+              usage in the UI, per App Review Guideline 2.5.1. */}
+          <SectionHeader title={t('profileAppleHealth')} colors={colors} />
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 14 }]}>
+            <Text style={[styles.suggestionText, { color: colors.text2 }]}>{t('profileAppleHealthDesc')}</Text>
+            <Text style={[styles.suggestionText, { marginTop: 8, fontWeight: '700', color: healthKitAuthorized ? colors.lime : colors.text3 }]}>
+              {healthKitAuthorized ? t('profileAppleHealthConnected') : t('profileAppleHealthNotConnected')}
+            </Text>
           </View>
 
           {showActivitySuggestion && suggestedActivityLevel && (
