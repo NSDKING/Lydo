@@ -116,6 +116,10 @@ export async function generateMenuPlan(params?: {
   pantryItems?: string[];
   kitchenAppliances?: string[];
   mealRatingsSummary?: string;
+  // One-off, per-generation asks — not persisted to the profile.
+  includedRecipes?: string;
+  selectedRecipes?: UserRecipe[];
+  generalNotes?: string;
 }): Promise<MenuPlan> {
   const data = await post<{ plan: MenuPlan }>('/menu/generate', {
     days: params?.days ?? 7,
@@ -128,6 +132,9 @@ export async function generateMenuPlan(params?: {
     pantryItems: params?.pantryItems ?? [],
     kitchenAppliances: params?.kitchenAppliances ?? [],
     mealRatingsSummary: params?.mealRatingsSummary ?? '',
+    includedRecipes: params?.includedRecipes ?? '',
+    selectedRecipes: params?.selectedRecipes ?? [],
+    generalNotes: params?.generalNotes ?? '',
   });
   return data.plan;
 }
@@ -270,6 +277,7 @@ export interface UserRecipe {
   weight_g?: number | null;
   ingredients: string[];
   lidl_products_used: string[];
+  source?: 'manual' | 'plan' | 'tiktok';
   created_at: string;
 }
 
@@ -287,6 +295,7 @@ export async function fetchUserRecipes(): Promise<UserRecipe[]> {
 export async function saveUserRecipe(
   recipe: Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'ingredients' | 'lidl_products_used'> & { weight_g?: number | null },
   userId?: string,
+  source: 'manual' | 'plan' | 'tiktok' = 'manual',
 ): Promise<string> {
   const uid = userId ?? (await supabase.auth.getSession()).data.session?.user.id;
   if (!uid) throw new Error('Not authenticated');
@@ -299,6 +308,7 @@ export async function saveUserRecipe(
     fat_g: recipe.fat_g,
     ingredients: recipe.ingredients,
     lidl_products_used: recipe.lidl_products_used,
+    source,
   };
   if (recipe.weight_g != null) payload.weight_g = recipe.weight_g;
   const { data, error } = await supabase

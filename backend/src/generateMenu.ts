@@ -53,6 +53,14 @@ Retourne uniquement du JSON — pas de markdown, pas de texte:
 {"steps": ["Étape 1.", "Étape 2.", "Étape 3.", "Étape 4."]}
 Règles: 4–5 étapes, chacune en moins de 12 mots, mode impératif, en français.`;
 
+export interface RequestedRecipe {
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+
 export interface MenuRequest {
   userId?: string;
   preferences?: string;
@@ -62,8 +70,18 @@ export interface MenuRequest {
   targetCalories?: number;
   weeklyBudget?: number;
   pantryItems?: string[];
+  kitchenAppliances?: string[];
   teaserDay?: string;
   mealRatingsSummary?: string;
+  // One-off, per-generation asks (not persisted to the profile) — free text of
+  // dishes the user wants this week, and specific saved recipes the user
+  // hand-picked from "My Recipes" (already have exact macros) to slot in as-is.
+  includedRecipes?: string;
+  selectedRecipes?: RequestedRecipe[];
+  // General week-wide modifiers, e.g. "more dessert", "more spicy food" — unlike
+  // includedRecipes/selectedRecipes this isn't pinned to one specific day, so it's
+  // passed to every batch as-is rather than being round-robin day-assigned.
+  generalNotes?: string;
 }
 
 export interface Meal {
@@ -152,7 +170,26 @@ export async function generateMenu(request: MenuRequest): Promise<{ plan: MenuPl
   const batches: string[][] = [];
   for (let i = 0; i < allDays.length; i += 3) batches.push(allDays.slice(i, i + 3));
 
+  // Batches run independently in parallel with no cross-batch visibility, so
+  // "include this recipe" requests must be pre-assigned to one day each here —
+  // otherwise every batch would try to place the same items, duplicating them.
+  function assignToDays<T>(items: T[]): Record<string, T[]> {
+    const byDay: Record<string, T[]> = {};
+    items.forEach((item, i) => {
+      const day = allDays[i % allDays.length];
+      (byDay[day] ??= []).push(item);
+    });
+    return byDay;
+  }
+  const includedRecipeNames = (request.includedRecipes ?? '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const includedByDay = assignToDays(includedRecipeNames);
+  const selectedByDay = assignToDays(request.selectedRecipes ?? []);
+
   const generateBatch = async (dayNames: string[]): Promise<DayPlan[]> => {
+    const includedForBatch = dayNames.flatMap(d => (includedByDay[d] ?? []).map(name => ({ name, day: d })));
+    const selectedForBatch = dayNames.flatMap(d => (selectedByDay[d] ?? []).map(r => ({ ...r, day: d })));
+
     const userRequest = [
       `Generate a meal plan for ONLY these days: ${dayNames.join(', ')}. ${mealsPerDay} meals per day.`,
       `Daily calorie target: ${targetCalories} kcal.`,
@@ -162,9 +199,19 @@ export async function generateMenu(request: MenuRequest): Promise<{ plan: MenuPl
       request.pantryItems?.length
         ? `User already has these ingredients at home — use them in meals and do NOT add them to lidl_products_used or ingredients lists (no need to buy): ${request.pantryItems.join(', ')}.`
         : '',
+      request.kitchenAppliances?.length
+        ? `Available kitchen appliances: ${request.kitchenAppliances.join(', ')}. Prefer meals that can be made with these.`
+        : '',
       request.preferences ? `Preferences: ${request.preferences}.` : '',
       request.dietaryRestrictions ? `Dietary restrictions: ${request.dietaryRestrictions}.` : '',
       request.mealRatingsSummary ?? '',
+      request.generalNotes ? `Additional request for this week (applies across all days, not just one): ${request.generalNotes}.` : '',
+      includedForBatch.length
+        ? `The user specifically asked for these dishes this week — include one on its assigned day, adapting the recipe as needed to fit the calorie target: ${includedForBatch.map(r => `"${r.name}" on ${r.day}`).join('; ')}.`
+        : '',
+      selectedForBatch.length
+        ? `The user hand-picked these exact saved recipes to include as one meal each on their assigned day — use the given name, calories and macros AS-IS, do not alter them, just pick an appropriate meal slot: ${selectedForBatch.map(r => `"${r.name}" on ${r.day} (${r.calories} kcal, ${r.protein_g}g protein, ${r.carbs_g}g carbs, ${r.fat_g}g fat)`).join('; ')}.`
+        : '',
     ].filter(Boolean).join(' ');
 
     const msg = await anthropic.messages.create({

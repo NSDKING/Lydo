@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { DAY_NAMES } from '@/constants/i18n';
+import { RegenerateModal } from '@/components/RegenerateModal';
 import { useLang } from '@/context/LangContext';
 import { useMenu } from '@/context/MenuContext';
 import { useProfile } from '@/context/ProfileContext';
@@ -83,6 +84,7 @@ export default function PlanScreen() {
   const [editDraft, setEditDraft] = useState('');
   const [swapState, setSwapState] = useState<SwapState | null>(null);
   const [catalog, setCatalog] = useState<LidlPromoDetail[]>([]);
+  const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
 
   React.useEffect(() => {
     fetchLidlCatalog().then(setCatalog).catch(() => {});
@@ -246,7 +248,7 @@ export default function PlanScreen() {
             </View>
             <TouchableOpacity
               style={[styles.regenBtn, { borderColor: colors.border2, backgroundColor: colors.surface2 }]}
-              onPress={refresh} disabled={isLoading}
+              onPress={() => setRegenerateModalOpen(true)} disabled={isLoading}
             >
               <Text style={[styles.regenIcon, { color: colors.text2 }]}>⟳</Text>
               <Text style={[styles.regenText, { color: colors.text2 }]}>{isLoading ? t('planGenerating') : t('planRegenerate')}</Text>
@@ -502,6 +504,12 @@ export default function PlanScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <RegenerateModal
+        visible={regenerateModalOpen}
+        onClose={() => setRegenerateModalOpen(false)}
+        onSubmit={(opts) => refresh(opts)}
+      />
     </SafeAreaView>
   );
 }

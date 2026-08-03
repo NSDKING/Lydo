@@ -200,7 +200,7 @@ export default function RecipesScreen() {
     if (!meal) return;
     setPlanMealSaving(prev => ({ ...prev, [idx]: true }));
     try {
-      await saveUserRecipe(meal);
+      await saveUserRecipe(meal, undefined, 'plan');
       await loadMyRecipes();
     } finally {
       setPlanMealSaving(prev => ({ ...prev, [idx]: false }));
@@ -275,7 +275,7 @@ export default function RecipesScreen() {
         fat_g: recipe.macros.fat_g,
         ingredients: recipe.ingredients,
         lidl_products_used: lidlProducts,
-      });
+      }, undefined, 'tiktok');
       updateImportState(recipeIdx, { saving: false, savedOk: true });
       loadMyRecipes();
     } catch {

@@ -6,6 +6,7 @@ import {
   MenuPlan,
   TiktokRecipe,
   clearWeeklyPlan,
+  fetchUserRecipes,
   fetchWeeklyPlan,
   generateMenuPlan,
   generateMenuTeaser,
@@ -24,6 +25,13 @@ const TODAY = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
 type DayKey = string; // "Monday", "Tuesday", …
 type MealOverrides = Record<DayKey, Record<number, Partial<Meal>>>;
+
+// One-off asks for a single (re)generation — not persisted to the profile.
+export interface RegenerateOptions {
+  includedRecipes?: string;
+  selectedRecipeIds?: string[];
+  generalNotes?: string;
+}
 
 // The app only ever shows the plan for the current real-world week, so a weekday
 // name (DayKey) maps 1:1 to a calendar date within it — needed to persist logs
@@ -61,7 +69,7 @@ interface MenuContextValue {
   isLoading: boolean;
   error: string | null;
   planExistsInDB: boolean;
-  refresh: () => void;
+  refresh: (opts?: RegenerateOptions) => void;
   // logging
   loggedMeals: Record<DayKey, Set<number>>;
   logMeal: (day: DayKey, idx: number) => void;
@@ -334,7 +342,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const load = useCallback(async (forceRegenerate = false) => {
+  const load = useCallback(async (forceRegenerate = false, regenOpts?: RegenerateOptions) => {
     if (didInitialLoad.current && !forceRegenerate) return;
     didInitialLoad.current = true;
 
@@ -410,6 +418,13 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       const p = profileRef.current;
       const ratingsSummary = buildRatingsSummary(planRef.current, mealRatingsRef.current, mealOverridesRef.current);
 
+      let selectedRecipes: Awaited<ReturnType<typeof fetchUserRecipes>> = [];
+      if (regenOpts?.selectedRecipeIds?.length) {
+        const saved = await fetchUserRecipes().catch(() => []);
+        const idSet = new Set(regenOpts.selectedRecipeIds);
+        selectedRecipes = saved.filter(r => idSet.has(r.id));
+      }
+
       const fresh = await generateMenuPlan({
         days: 7,
         mealsPerDay: 3,
@@ -421,6 +436,9 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
         pantryItems,
         kitchenAppliances,
         mealRatingsSummary: ratingsSummary,
+        includedRecipes: regenOpts?.includedRecipes,
+        selectedRecipes,
+        generalNotes: regenOpts?.generalNotes,
       });
       setPlan(fresh);
       setPlanExistsInDB(true);
@@ -811,7 +829,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MenuContext.Provider value={{
-      plan, isLoading, error, planExistsInDB, refresh: () => load(true),
+      plan, isLoading, error, planExistsInDB, refresh: (opts) => load(true, opts),
       loggedMeals, logMeal, getEatenCalories, getEatenMacros,
       mealRatings, mealDescriptions, rateMeal, describeMeal,
       lockedMeals, lockMeal,
