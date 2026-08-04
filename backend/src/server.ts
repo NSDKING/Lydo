@@ -95,7 +95,7 @@ Health:  /health
 
 // ─── Auto-scrape Lidl catalog ────────────────────────────────────────────────
 // Lidl France refreshes promos every Thursday. We check DB staleness on startup
-// and every 6 hours — if data is older than 3 days, trigger a full catalog scrape.
+// and every 6 hours — if data is older than 1 day, trigger a full catalog scrape.
 
 async function maybeAutoScrape() {
   try {
@@ -116,7 +116,7 @@ async function maybeAutoScrape() {
     const ageDays = ageMs / (1000 * 60 * 60 * 24);
     console.log(`[auto-scrape] Lidl data age: ${ageDays.toFixed(1)} days`);
 
-    if (ageDays >= 3) {
+    if (ageDays >= 1) {
       console.log('[auto-scrape] Stale — triggering catalog scrape');
       scrapeFullCatalog().catch(e => console.error('[auto-scrape] failed:', e.message));
     }

@@ -50,30 +50,41 @@ function stripQty(s: string) {
   return s.replace(/^\d+[\.,]?\d*\s*(g|kg|ml|cl|l|x|pc|pcs|tbsp|tsp|cup|oz|lb|piece|tranches?|filets?)?\s*/i, '').trim();
 }
 
-// Returns the catalog entry with the most keyword overlap, preferring entries
-// that have an image_url.
-function matchCatalog(name: string, catalog: LidlPromoDetail[]): LidlPromoDetail | undefined {
-  const cleaned = stripQty(name);
-  const words = norm(cleaned)
-    .replace(/\blidl\b/g, '')
+function tokenize(s: string): string[] {
+  return norm(s)
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ') // punctuation -> space, so trailing commas etc. don't stick to words
     .trim()
     .split(/\s+/)
+    .filter(Boolean);
+}
+
+// Returns the catalog entry with the most whole-word overlap, preferring
+// entries that have an image_url. Requires at least half the query's
+// significant words to actually appear in the title — a single incidental
+// shared word (e.g. a brand name) was previously enough to "win" a match
+// against a completely unrelated product (e.g. "linguine" matching a
+// laundry-detergent listing scraped into the same catalog table).
+function matchCatalog(name: string, catalog: LidlPromoDetail[]): LidlPromoDetail | undefined {
+  const cleaned = stripQty(name);
+  const words = tokenize(cleaned.replace(/\blidl\b/gi, ''))
     .filter(w => w.length >= 2 && !STOPWORDS.has(w));
 
   if (!words.length) return undefined;
 
   let best: LidlPromoDetail | undefined;
   let bestScore = 0;
+  let bestMatches = 0;
 
   for (const p of catalog) {
-    const t = norm(p.title);
-    const matches = words.filter(w => t.includes(w)).length;
+    const titleWords = new Set(tokenize(p.title));
+    const matches = words.filter(w => titleWords.has(w)).length;
     if (matches === 0) continue;
     // Weight: word overlap × 10, bonus +5 if the entry has an image
     const score = matches * 10 + (p.image_url ? 5 : 0);
-    if (score > bestScore) { bestScore = score; best = p; }
+    if (score > bestScore) { bestScore = score; best = p; bestMatches = matches; }
   }
 
+  if (!best || bestMatches < Math.ceil(words.length / 2)) return undefined;
   return best;
 }
 

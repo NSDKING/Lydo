@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lydo.app",
-      "buildNumber": "25",
+      "buildNumber": "26",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan receipts and food labels.",
